@@ -102,6 +102,8 @@ h1, h2, h3 { font-family: var(--f-display); margin: 0; line-height: 1.1; font-we
 /* settings: category chips and a couple of switches */
 .set { display: flex; flex-direction: column; gap: 10px; }
 .cats { display: flex; flex-wrap: wrap; gap: 6px; }
+.cat-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ghost.mini { min-height: 30px; padding: 3px 12px; font-size: 12px; }
 .chip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 6px 12px; min-height: 36px; font-size: 13px; font-weight: 700; color: var(--muted); }
 .chip[aria-pressed="true"] { background: rgba(255, 200, 87, .14); border-color: var(--gold); color: var(--ink); }
 .chip:disabled { cursor: default; }
@@ -302,7 +304,7 @@ button.prow:disabled { cursor: default; opacity: .55; }
     <div class="status" id="status"></div>
     <div class="sub" id="sub"></div>
     <form class="clue-form" id="clueForm" hidden>
-      <input class="input" id="clueIn" maxlength="20" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="One word" enterkeyhint="send" aria-label="Your one-word clue">
+      <input class="input" id="clueIn" dir="auto" maxlength="20" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="One word" enterkeyhint="send" aria-label="Your one-word clue">
       <button class="btn primary" id="clueSend" type="submit">Send</button>
     </form>
     <div id="actMore"></div>
@@ -336,11 +338,26 @@ const CATS = {
   clothes: ['Clothes & things you wear', 'Shirt,Trousers,Dress,Hat,Shoes,Socks,Jacket,Scarf,Gloves,Sunglasses,Watch,Ring,Necklace,Belt,Tie,Pyjamas,Hoodie,Jeans,Boots,Sandals,Cap,Suit,Swimsuit,Raincoat,Uniform,Backpack,Handbag,Earrings,Wallet,Umbrella,Slippers,Coat,Skirt,Sweater,Bracelet,Headphones,Crown,Mask,Apron,Abaya'],
   world: ['Around the world', 'Egypt,Japan,Brazil,France,Italy,America,China,India,Mexico,Turkey,Libya,Morocco,Saudi Arabia,Dubai,London,Paris,New York,Tokyo,Cairo,Rome,Spain,Germany,Australia,Canada,Russia,Greece,Tunisia,Istanbul,Mecca,Venice,Switzerland,Argentina,Kenya,Iceland,Hawaii,Las Vegas,Antarctica,Sahara,North Pole,Amazon rainforest'],
   fun: ['Fun & hobbies', 'Video games,Cooking,Reading,Drawing,Dancing,Singing,Camping,Gardening,Photography,Knitting,Jigsaw puzzle,Board games,Karaoke,Magic tricks,Shopping,Travelling,Painting,Guitar,Piano,Drums,Movies,Picnic,Barbecue,Birthday party,Wedding,Fireworks,Circus,Theme park,Roller coaster,Card games,Selfie,Social media,Podcast,Cartoons,Comics,Lego,Kite,Balloon,Treasure hunt,Hide and seek'],
-  school: ['School & work', 'Homework,Exam,Pencil,Eraser,Ruler,Notebook,Calculator,Classroom,Whiteboard,Lunchbox,Map,Globe,Scissors,Glue,Holidays,Timetable,Maths,Science,History,Art class,School bell,Break time,Graduation,Certificate,Laptop,Printer,Email,Meeting,Boss,Salary,Desk,Stapler,Projector,Dictionary,Alphabet,Microscope,Report card,Detention,Sports day,School bus']
+  school: ['School & work', 'Homework,Exam,Pencil,Eraser,Ruler,Notebook,Calculator,Classroom,Whiteboard,Lunchbox,Map,Globe,Scissors,Glue,Holidays,Timetable,Maths,Science,History,Art class,School bell,Break time,Graduation,Certificate,Laptop,Printer,Email,Meeting,Boss,Salary,Desk,Stapler,Projector,Dictionary,Alphabet,Microscope,Report card,Detention,Sports day,School bus'],
+  /* Arabic words: the comma between words is the Arabic comma */
+  'ar-food': ['أكل', 'بيتزا،موز،شوكولاتة،خبز،رز،آيس كريم،برغر،مكرونة،جبنة،بيض،تفاح،دلاع،فشار،عسل،سلطة،كيكة،قهوة،شاهي،برتقال،عنب،سندويتش،فلافل،حمص،تمر،فطاير،فراولة،ليمون،جزر،بطاطا،طماطم،زيتون،بسكويت،زبادي،حليب،شاورما،دونات،شيبس،بصل،فول،هريسة', 'ar'],
+  'ar-dishes': ['أكلات شعبية', 'بازين،كسكسي،عصبان،مبكبكة،شربة،رشدة،فتات،مقروض،غريبة،بسيسة،عصيدة،سفنز،زميطة،شكشوكة،طاجين،محشي،كبسة،منسف،مقلوبة،ملوخية،كفتة،بريك،طعمية،بقلاوة،كنافة،قطايف،معمول،لقيمات،تبولة،فتوش،مندي،حلوى شامية', 'ar'],
+  'ar-animals': ['حيوانات', 'قطة،كلب،أسد،فيل،زرافة،جمل،حصان،قرد،ثعبان،قرش،دولفين،بطريق،نسر،بومة،أرنب،نمر،دب،حمار وحشي،تمساح،ضفدع،فراشة،نحلة،عنكبوت،سلحفاة،كنغر،باندا،ذئب،ثعلب،بقرة،خروف،معزة،ببغاء،أخطبوط،حوت،فأر،نملة،غزال،خفاش،طاووس،دجاجة', 'ar'],
+  'ar-places': ['أماكن', 'بحر،مستشفى،مدرسة،مطار،مكتبة،متحف،حديقة حيوانات،سينما،جامع،مطعم،سوق،حديقة،صحراء،جبل،نادي رياضي،مصرف،فندق،سجن،مزرعة،ملعب،مطبخ،حمام،جزيرة،غابة،قلعة،محطة قطار،مسبح،مخبز،حلاق،مركز شرطة،مكتب،كهف،صالة أفراح،مغسلة سيارات،صيدلية،محطة بنزين،جامعة،مقهى،مول،شاطئ', 'ar'],
+  'ar-jobs': ['مهن', 'طبيب،معلم،طيار،طباخ،شرطي،رجل إطفاء،فلاح،طبيب أسنان،ممرض،مهندس،بنّاء،سائق تاكسي،خياط،صياد،خباز،ميكانيكي،محامي،قاضي،رائد فضاء،مغني،ممثل،لاعب كرة،مصور،صحفي،جندي،سباك،كهربائي،نادل،محاسب،رسام،عالم،مبرمج،طبيب بيطري،ساعي بريد،منقذ،ساحر،محقق،راعي غنم،نجار،حلاق', 'ar'],
+  'ar-sports': ['رياضة', 'كرة القدم،كرة السلة،تنس،سباحة،ملاكمة،جري،كرة الطائرة،دراجات،جولف،كاراتيه،تزلج،ركوب الأمواج،ركوب الخيل،مصارعة،تنس الطاولة،بولينج،تسلق،غوص،صيد السمك،شطرنج،رماية،جمباز،رجبي،بادمنتون،هوكي،رفع أثقال،مبارزة،إبحار،سنوكر،ماراثون،يوغا،تجديف،جودو،كرة اليد،سباق سيارات', 'ar'],
+  'ar-home': ['في البيت', 'كنبة،سرير،ثلاجة،تلفزيون،مخدة،مراية،مصباح،باب،شباك،سجادة،ساعة حائط،فرن،غسالة،فرشاة أسنان،دوش،بطانية،كرسي،طاولة،ستارة،ملعقة،صحن،غلاية،شاحن،ريموت،مروحة،مكيف،مكنسة،منشفة،مفتاح،درج،رف كتب،صابون،مكواة،شمعة،دولاب،جرس الباب،ميكروويف،محمصة،براد شاهي،كاسة', 'ar'],
+  'ar-transport': ['مواصلات', 'سيارة،حافلة،قطار،طيارة،دراجة،موتو،قارب،سفينة،هليكوبتر،تاكسي،شاحنة،جرار،صاروخ،غواصة،سكوتر،إسعاف،سيارة إطفاء،ترام،منطاد،مترو،عبّارة،جت سكي،سيارة شرطة،تلفريك،مركبة فضائية،يخت،مظلة هبوط،سلم كهربائي،مصعد،كرسي متحرك،عربة أطفال،حنطور،بلدوزر،ليموزين', 'ar'],
+  'ar-nature': ['طبيعة وطقس', 'شمس،قمر،مطر،ثلج،رعد،قوس قزح،بركان،نهر،محيط،شجرة،وردة،سحابة،ريح،نجمة،رمل،صخرة،شلال،بحيرة،زلزال،ضباب،جليد،نار،عاصفة،عشب،غروب،برق،إعصار،نخلة،صبار،فطر،واحة،موجة،مذنب،كوكب،طين،سماء،قبلي،كثبان رملية،قمر صناعي،بحر', 'ar'],
+  'ar-clothes': ['ملابس', 'قميص،سروال،فستان،قبعة،حذاء،جوارب،جاكيت،شال،قفازات،نظارة شمس،ساعة يد،خاتم،عقد،حزام،ربطة عنق،بيجامة،جينز،بوت،صندل،طاقية،بدلة،مايوه،معطف،زي مدرسي،شنطة ظهر،شنطة يد،حلق،محفظة،مظلة،شبشب،تنورة،كنزة،إسوارة،سماعات،تاج،عباية،جلابية،فرملة،شنّة،حولي', 'ar'],
+  'ar-world': ['حول العالم', 'مصر،اليابان،البرازيل،فرنسا،إيطاليا،أمريكا،الصين،الهند،المكسيك،تركيا،ليبيا،المغرب،السعودية،دبي،لندن،باريس،نيويورك،طوكيو،القاهرة،روما،إسبانيا،ألمانيا،أستراليا،كندا،روسيا،اليونان،تونس،إسطنبول،مكة،البندقية،سويسرا،الأرجنتين،طرابلس،بنغازي،مصراتة،القطب الشمالي،الصحراء الكبرى،الجزائر،قطر،لبنان', 'ar'],
+  'ar-fun': ['هوايات ومرح', 'ألعاب فيديو،طبخ،قراءة،رسم،رقص،غناء،تخييم،زراعة،تصوير،ألغاز،ألعاب ورق،كاراوكي،خدع سحرية،تسوق،سفر،بيانو،طبل،عود،أفلام،نزهة،شواء،عيد ميلاد،عرس،ألعاب نارية،سيرك،مدينة ملاهي،سيلفي،سوشيال ميديا،رسوم متحركة،ليغو،طائرة ورقية،بالون،بحث عن الكنز،غميضة،عيد،رمضان،سهرة،كرة قدم في الشارع', 'ar'],
+  'ar-school': ['مدرسة وشغل', 'واجب،امتحان،قلم رصاص،ممحاة،مسطرة،كراسة،آلة حاسبة،فصل،سبورة،خريطة،مقص،غراء،عطلة،جدول،رياضيات،علوم،تاريخ،جرس،فسحة،تخرج،شهادة،لابتوب،طابعة،إيميل،اجتماع،مدير،مرتب،مكتب،دباسة،قاموس،حروف،ميكروسكوب،نتيجة،حافلة المدرسة،حقيبة مدرسية،طباشير،معلمة،إذاعة مدرسية', 'ar']
 };
-Object.keys(CATS).forEach(k => { CATS[k] = { name: CATS[k][0], words: CATS[k][1].split(',') }; });
+Object.keys(CATS).forEach(k => { const [name, list, lang] = CATS[k]; CATS[k] = { name, lang: lang || 'en', words: list.split(lang === 'ar' ? '،' : ',') }; });
 const CAT_KEYS = Object.keys(CATS);
-const DEFAULT_OPTS = { cats: CAT_KEYS.slice(), laps: 2, hint: true, say: false };
+const EN_KEYS = CAT_KEYS.filter(k => CATS[k].lang === 'en'), AR_KEYS = CAT_KEYS.filter(k => CATS[k].lang === 'ar');
+const DEFAULT_OPTS = { cats: EN_KEYS.slice(), laps: 2, hint: true, say: false };
 
 const LS = (() => { try { return window.localStorage; } catch (e) { return null; } })();
 const SS = (() => { try { return window.sessionStorage; } catch (e) { return null; } })();
@@ -353,19 +370,20 @@ const rid = () => Math.random().toString(36).slice(2, 10) + Math.random().toStri
 const pick = a => a[Math.floor(Math.random() * a.length)];
 function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 /* compare words without caring about case, spaces, accents or a plural s */
-function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9؀-ۿ]/g, ''); }
+function norm(s) { return String(s || '').replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9؀-ۿ]/g, ''); }
 function givesAway(clue, word) {
-  const c = norm(clue), w = norm(word);
+  const al = s => s.length > 3 && s.startsWith('ال') ? s.slice(2) : s;
+  const c = al(norm(clue)), w = al(norm(word));
   if (!c || !w) return false;
   if (c === w || c === w + 's' || c + 's' === w || c === w + 'es') return true;
-  return w.length >= 4 && c.includes(w);
+  return (w.length >= 4 || /[\u0600-\u06ff]/.test(w)) && w.length >= 3 && c.includes(w);
 }
 function cleanClue(s) { return String(s || '').trim().replace(/\s+/g, ' ').slice(0, 20); }
 function okClue(s) { return !!s && !/\s/.test(s); }
 function fixOpts(o) {
   o = Object.assign({}, DEFAULT_OPTS, o || {});
   o.cats = (Array.isArray(o.cats) ? o.cats : []).filter(k => CATS[k]);
-  if (!o.cats.length) o.cats = CAT_KEYS.slice();
+  if (!o.cats.length) o.cats = EN_KEYS.slice();
   o.laps = Math.max(1, Math.min(3, +o.laps || 2));
   o.hint = o.hint !== false; o.say = !!o.say;
   return o;
@@ -939,14 +957,24 @@ function renderNet() {
 /* the settings block, used on the home screen (pass the phone) and in the room lobby */
 function settingsHTML(o, edit, room) {
   const dis = edit ? '' : ' disabled';
-  return `<p class="eyebrow">Word categories</p>
-    <div class="cats">${CAT_KEYS.map(k => `<button class="chip" type="button" data-cat="${k}" aria-pressed="${o.cats.includes(k)}"${dis}>${esc(CATS[k].name)}</button>`).join('')}</div>
+  const group = (keys, title, g) => { const all = keys.every(k => o.cats.includes(k)); return `<div class="cat-head"><p class="eyebrow">${title}</p>${edit ? `<button class="ghost mini" type="button" data-group="${g}">${all ? 'None' : 'All'}</button>` : ''}</div>
+    <div class="cats"${g === 'ar' ? ' dir="rtl" lang="ar"' : ''}>${keys.map(k => `<button class="chip" type="button" data-cat="${k}" aria-pressed="${o.cats.includes(k)}"${dis}>${esc(CATS[k].name)}</button>`).join('')}</div>`; };
+  return `${group(EN_KEYS, 'English words', 'en')}
+    ${group(AR_KEYS, 'Arabic words · كلمات عربية', 'ar')}
     <label class="check">Clue rounds <select class="input" data-opt="laps"${dis}>${[1, 2, 3].map(n => `<option value="${n}"${o.laps === n ? ' selected' : ''}>${n === 1 ? 'Once around' : n === 2 ? 'Twice around' : 'Three times around'}</option>`).join('')}</select></label>
     <label class="check"><input type="checkbox" data-opt="hint"${o.hint ? ' checked' : ''}${dis}> Tell the imposter the category</label>
     ${room ? `<label class="check"><input type="checkbox" data-opt="say"${o.say ? ' checked' : ''}${dis}> Say the words out loud instead of typing (you're all in the same room)</label>` : ''}`;
 }
 function readSettings(el, o, e) {
   o = fixOpts(o);
+  const grp = e.target.closest('[data-group]');
+  if (grp) {
+    const keys = grp.dataset.group === 'ar' ? AR_KEYS : EN_KEYS;
+    const all = keys.every(k => o.cats.includes(k));
+    o.cats = all ? o.cats.filter(k => !keys.includes(k)) : o.cats.concat(keys.filter(k => !o.cats.includes(k)));
+    if (!o.cats.length) o.cats = (grp.dataset.group === 'ar' ? EN_KEYS : AR_KEYS).slice();
+    return o;
+  }
   const chip = e.target.closest('[data-cat]');
   if (chip) {
     const k = chip.dataset.cat;
@@ -1025,8 +1053,8 @@ function renderGame() {
 function cardHTML(c, opts) {
   opts = opts || {};
   const hide = opts.hide ? '<button class="ghost hide" type="button" id="cardHide">Hide</button>' : '';
-  if (c.imp) return `<div class="card imp">${hide}<p class="eyebrow">Shh… you are</p><div class="word">The imposter</div><p class="note">${c.cat ? `The category is <b>${esc(c.cat)}</b>. ` : ''}You don't know the word. Listen, then blend in.</p>${opts.extra || ''}</div>`;
-  return `<div class="card">${hide}<p class="eyebrow">The secret word</p><div class="word">${esc(c.word)}</div><p class="note">${esc(c.cat)} · one of you doesn't know it</p>${opts.extra || ''}</div>`;
+  if (c.imp) return `<div class="card imp">${hide}<p class="eyebrow">Shh… you are</p><div class="word">The imposter</div><p class="note">${c.cat ? `The category is <b dir="auto">${esc(c.cat)}</b>. ` : ''}You don't know the word. Listen, then blend in.</p>${opts.extra || ''}</div>`;
+  return `<div class="card">${hide}<p class="eyebrow">The secret word</p><div class="word" dir="auto">${esc(c.word)}</div><p class="note">${esc(c.cat)} · one of you doesn't know it</p>${opts.extra || ''}</div>`;
 }
 function renderCard() {
   const el = $('card');
@@ -1067,7 +1095,7 @@ function renderBoard() {
     else if (V.phase === 'guess' && i === V.imp) tags.push('<small class="bad">Caught</small>');
     else if (!solo && !p.online) tags.push('<small class="away">Away</small>');
     else if (mine) tags.push('<small>You</small>');
-    const clues = V.clues.filter(c => c.pi === i).map(c => c.w == null ? '<span class="clue skip">skipped</span>' : `<span class="clue">${esc(c.w)}</span>`).join('');
+    const clues = V.clues.filter(c => c.pi === i).map(c => c.w == null ? '<span class="clue skip">skipped</span>' : `<span class="clue" dir="auto">${esc(c.w)}</span>`).join('');
     let st = '';
     if (V.phase === 'clue' && sp === i) st = '<span class="st go">Thinking…</span>';
     else if (V.phase === 'vote' && !solo) st = V.voted[i] ? '<span class="st ok">Voted</span>' : '<span class="st">Voting…</span>';
@@ -1132,7 +1160,7 @@ function renderAct() {
     if (meGuess && V.choices) {
       status = 'Caught! Guess the secret word to steal the win.';
       sub = `It was from ${V.catName}. You get one guess.`;
-      more = `<div class="choices">${V.choices.map(w => `<button class="btn" type="button" data-guess="${esc(w)}">${esc(w)}</button>`).join('')}</div>`;
+      more = `<div class="choices">${V.choices.map(w => `<button class="btn" type="button" data-guess="${esc(w)}" dir="auto">${esc(w)}</button>`).join('')}</div>`;
     } else {
       status = `${who} was the imposter!`;
       sub = solo ? 'Pass them the phone for one guess at the word.' : `They get one guess at the word to steal the win…`;
@@ -1200,6 +1228,7 @@ function openRules() {
     <li><b>Vote.</b> Everyone votes for who they think the imposter is. The player with the most votes is out. A tie means nobody is out.</li>
     <li><b>Last chance.</b> If the imposter is caught, they get one guess at the secret word. Guess it and they still win.</li>
     <li><b>Points.</b> The imposter gets 2 for getting away or guessing the word. Otherwise everyone else gets 1. In online rooms, voting for the real imposter gets you 1 more.</li>
+    <li><b>Words.</b> Pick English or Arabic categories, or mix them. Arabic clues work the same way.</li>
     <li><b>Two ways to play.</b> Online rooms: everyone on their own phone, 3 to 10 players, typing clues or saying them out loud. Pass one phone: each person looks at their card in turn, then you talk.</li>
   </ul>
   <div class="sheet-actions"><button class="btn primary" type="button" data-close>Got it</button></div>`);
@@ -1332,8 +1361,8 @@ function onSet(e, el, isLobby) {
   else { homeOpts = o; setItem(LS, 'im-opts', o); $('hSet').innerHTML = settingsHTML(o, true, false); }
 }
 ['click', 'change'].forEach(ev => {
-  $('hSet').addEventListener(ev, e => { if ((ev === 'click') === !!e.target.closest('[data-cat]')) onSet(e, $('hSet'), false); });
-  $('lSet').addEventListener(ev, e => { if ((ev === 'click') === !!e.target.closest('[data-cat]')) onSet(e, $('lSet'), true); });
+  $('hSet').addEventListener(ev, e => { if ((ev === 'click') === !!e.target.closest('[data-cat], [data-group]')) onSet(e, $('hSet'), false); });
+  $('lSet').addEventListener(ev, e => { if ((ev === 'click') === !!e.target.closest('[data-cat], [data-group]')) onSet(e, $('lSet'), true); });
 });
 
 $('lStart').addEventListener('click', () => act('start'));

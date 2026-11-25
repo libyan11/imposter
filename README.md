@@ -13,6 +13,7 @@ A party word game for 3 to 10 players, in your browser on phone or computer. Eve
 **Rules**
 - Everyone sees the secret word, except the imposter, who only sees the category (if that setting is on).
 - Take turns giving one word linked to the secret word. Go around 1 to 3 times.
+- Words: 12 English and 13 Arabic categories (including Libyan and Arab dishes). Mix them as you like.
 - Vote for who you think the imposter is. Most votes is out; a tie means nobody is.
 - A caught imposter gets one guess at the word. Guess right and they still win.
 - Points: the imposter gets 2 for escaping or guessing the word; otherwise everyone else gets 1. In online rooms, voting for the real imposter is worth 1 more.
