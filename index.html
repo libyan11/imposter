@@ -1,0 +1,1448 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>if("serviceWorker"in navigator&&location.protocol==="https:")addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17122B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Imposter">
+<meta name="description" content="Play Imposter with friends: everyone gets the same secret word except one imposter. Say one word each, then vote out the faker. Free, on your phones or passing one phone.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Cpath d=%27M6 20c8-6 18-8 26-8s18 2 26 8c0 16-6 30-26 34C12 50 6 36 6 20z%27 fill=%27%23FF4D6D%27/%3E%3Cpath d=%27M14 27c3-4 9-5 13-1-3 4-9 5-13 1zM37 26c4-4 10-3 13 1-4 4-10 3-13-1z%27 fill=%27%2317122B%27/%3E%3C/svg%3E">
+<title>Imposter · Game Night</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@600;700;800&family=Manrope:wght@500;600;700;800&display=swap" media="print" onload="this.media='all'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@600;700;800&family=Manrope:wght@500;600;700;800&display=swap"></noscript>
+<script>/* connection tools load in the background, so the page shows at once; room actions wait for NET */window.NET=Promise.all(['vendor/peerjs-1.5.4.min.js','vendor/mqtt-5.10.1.min.js'].map(function(s){return new Promise(function(r){var e=document.createElement('script');e.src=s;e.async=false;e.onload=e.onerror=function(){r()};document.head.appendChild(e)})})).then(function(){window.NET_DONE=1});</script>
+<style>
+/* Layout: a dark night-time party room. Your secret card at the top, the clue board in the middle (one row per player), and what to do now at the bottom. */
+:root {
+  --bg: #17122B;
+  --bg-2: #0E0B1C;
+  --bg-glow: #2C2052;
+  --panel: #1E1838;
+  --shade: rgba(0, 0, 0, .24);
+  --ink: #F4F1FB;
+  --muted: #ABA3C9;
+  --line: rgba(244, 241, 251, .14);
+  --accent: #FF4D6D;
+  --accent-deep: #D9304F;
+  --accent-soft: rgba(255, 77, 109, .3);
+  --gold: #FFC857;
+  --on-gold: #2A1C00;
+  --good: #7BE0A6;
+  --danger: #FF8A9A;
+  --shadow: rgba(0, 0, 0, .5);
+  --backdrop: rgba(8, 5, 18, .78);
+  --f-display: 'Rubik', 'Trebuchet MS', system-ui, sans-serif;
+  --f-body: 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background-color: var(--bg);
+  background-image: radial-gradient(ellipse at 50% 30%, var(--bg-glow), var(--bg) 60%, var(--bg-2));
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 15px;
+  line-height: 1.4;
+  padding-left: max(14px, env(safe-area-inset-left, 0px));
+  padding-right: max(14px, env(safe-area-inset-right, 0px));
+  overflow-x: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+a { color: var(--gold); }
+h1, h2, h3 { font-family: var(--f-display); margin: 0; line-height: 1.1; font-weight: 800; text-wrap: balance; }
+
+.screen { min-height: 100%; display: grid; place-items: center; padding-block: max(20px, env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-bottom, 0px)); }
+.panel { width: min(100%, 480px); display: flex; flex-direction: column; gap: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 24px 20px; box-shadow: 0 20px 50px var(--shadow); }
+.logo { font-size: 36px; display: flex; align-items: center; gap: 12px; }
+.mask { width: 44px; height: 44px; flex: none; }
+.tagline { margin: 6px 0 0; color: var(--muted); }
+.block { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+.block h3 { font-size: 17px; font-weight: 700; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.row > * { min-width: 0; }
+.grow { flex: 1; }
+.input { font: inherit; font-size: 16px; min-height: 46px; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg-2); color: var(--ink); width: 100%; }
+.code-input { text-transform: uppercase; letter-spacing: .3em; font-weight: 800; }
+.msg { min-height: 20px; font-weight: 700; font-size: 13.5px; color: var(--muted); }
+.msg.err { color: var(--danger); }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+.eyebrow { font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.room-code { font-family: var(--f-display); font-weight: 800; font-size: 48px; letter-spacing: .16em; color: var(--gold); line-height: 1; }
+.share { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.share code { background: var(--bg-2); border: 1px solid var(--line); padding: 6px 9px; border-radius: 8px; word-break: break-all; flex: 1; min-width: 0; font-family: var(--f-body); }
+.plist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.plist li { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; background: var(--shade); border: 1px solid var(--line); }
+.plist .nm { font-weight: 800; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--good); flex: none; }
+.dot.off { background: var(--danger); }
+.x { border: 1px solid var(--line); background: transparent; border-radius: 8px; padding: 6px 12px; min-height: 36px; font-size: 13px; font-weight: 700; }
+.check { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14px; }
+.check input { width: 20px; height: 20px; accent-color: var(--gold); flex: none; }
+.btn { border-radius: 12px; padding: 12px 14px; font-weight: 800; font-size: 15px; border: 1px solid var(--line); background: var(--shade); }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn.primary { background: var(--gold); border-color: var(--gold); color: var(--on-gold); }
+.btn.primary:not(:disabled):hover { filter: brightness(.92); }
+.btn.red { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.red:not(:disabled):hover { background: var(--accent-deep); }
+.ghost { background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; min-height: 38px; font-size: 13px; font-weight: 700; color: var(--ink); }
+@media (hover: hover) { .ghost:hover { border-color: var(--gold); } }
+
+/* settings: category chips and a couple of switches */
+.set { display: flex; flex-direction: column; gap: 10px; }
+.cats { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 6px 12px; min-height: 36px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.chip[aria-pressed="true"] { background: rgba(255, 200, 87, .14); border-color: var(--gold); color: var(--ink); }
+.chip:disabled { cursor: default; }
+.set select { width: auto; min-height: 40px; padding: 6px 10px; }
+.names { display: flex; flex-wrap: wrap; gap: 6px; }
+.names .chip { color: var(--ink); display: inline-flex; align-items: center; gap: 6px; }
+.names .chip b { color: var(--muted); font-size: 15px; line-height: 1; }
+
+/* Game */
+#app { height: 100%; max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; padding-block: max(8px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-bottom, 0px)); }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand h1 { font-size: 21px; }
+.brand p { margin: 1px 0 0; font-size: 11px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; font-weight: 700; }
+.net { color: var(--good); }
+.net.warn { color: var(--gold); }
+.top-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+#btnMenu { display: none; }
+.menu-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.menu-list .btn { text-align: left; }
+
+.card { position: relative; border-radius: 18px; padding: 14px 16px; text-align: center; border: 1px solid var(--line); background: linear-gradient(160deg, #2A2150, #1A1434); box-shadow: 0 10px 30px var(--shadow); display: flex; flex-direction: column; gap: 4px; align-items: center; }
+.card.imp { background: linear-gradient(160deg, #5A1A33, #2A0E20); border-color: rgba(255, 77, 109, .5); }
+.card .word { font-family: var(--f-display); font-weight: 800; font-size: 34px; line-height: 1.05; overflow-wrap: anywhere; }
+.card.imp .word { color: var(--accent); }
+.card .hide { position: absolute; top: 8px; right: 8px; min-height: 30px; padding: 3px 10px; font-size: 12px; }
+.card.covered { cursor: pointer; background: repeating-linear-gradient(135deg, #231B44 0 12px, #1D1739 12px 24px); }
+.card.covered .word { font-size: 20px; color: var(--muted); }
+.card.pass .word { font-size: 28px; }
+#card.center { flex: 1; display: grid; place-items: center; }
+#card.center .card { width: 100%; padding: 30px 18px; gap: 10px; }
+.card.pass .word span { color: var(--gold); }
+.card .btn { margin-top: 8px; min-width: 220px; }
+
+.board { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 2px; }
+.prow { display: grid; grid-template-columns: minmax(0, 7.5em) 1fr auto; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 9px 12px; border-radius: 14px; background: var(--shade); border: 1px solid var(--line); min-height: 50px; color: var(--ink); }
+button.prow { cursor: pointer; }
+button.prow:disabled { cursor: default; opacity: .55; }
+.prow.turn { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(255, 200, 87, .28); }
+.prow.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); background: rgba(255, 77, 109, .1); }
+.prow.was-imp { border-color: var(--accent); background: rgba(255, 77, 109, .12); }
+.prow .pn { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prow .pn small { display: block; font-size: 10px; letter-spacing: .06em; font-weight: 800; color: var(--muted); text-transform: uppercase; }
+.prow .pn small.away { color: var(--danger); }
+.prow .pn small.bad { color: var(--accent); }
+.clues { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.clue { background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px; padding: 3px 9px; font-weight: 800; font-size: 14px; overflow-wrap: anywhere; animation: pop .3s ease both; }
+.clue.skip { color: var(--muted); font-weight: 600; font-style: italic; }
+@keyframes pop { from { transform: scale(.7); opacity: 0; } to { transform: none; opacity: 1; } }
+.prow .st { font-size: 12px; font-weight: 800; color: var(--muted); white-space: nowrap; text-align: right; }
+.prow .st.go { color: var(--gold); }
+.prow .st.ok { color: var(--good); }
+.prow .st.votes { color: var(--accent); font-size: 14px; }
+
+.act { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); }
+.act.mine { border-color: var(--gold); }
+.status { font-size: 15px; font-weight: 800; }
+.act.mine .status { color: var(--gold); }
+.sub { font-size: 13px; color: var(--muted); font-weight: 600; }
+.sub b { color: var(--ink); }
+.clue-form { display: flex; gap: 8px; }
+.clue-form .input { flex: 1; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.actions .btn { flex: 1; }
+.order-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.order-line span { font-weight: 800; font-size: 13px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); }
+.order-line span:first-child { border-color: var(--gold); color: var(--gold); }
+.choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.choices .btn { padding: 10px 8px; overflow-wrap: anywhere; }
+.choices .btn.right { background: var(--good); border-color: var(--good); color: #062A16; }
+.choices .btn.wrong { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.log { font-size: 12.5px; color: var(--muted); }
+.log summary { cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 2px 0; }
+.log ol { margin: 6px 0 0; padding: 8px 12px 8px 30px; max-height: 140px; overflow-y: auto; background: var(--shade); border-radius: 10px; border: 1px solid var(--line); }
+
+.modal { position: fixed; inset: 0; z-index: 20; background: var(--backdrop); display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.sheet { width: min(100%, 520px); max-height: 100%; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 22px 20px; box-shadow: 0 20px 50px var(--shadow); }
+.sheet h2 { font-size: 25px; margin-bottom: 4px; }
+.sheet h2 span { color: var(--gold); }
+.sheet h2 span.red { color: var(--accent); }
+.sheet .lede { color: var(--muted); margin: 0 0 14px; }
+.sheet .lede b { color: var(--ink); }
+.sheet ul.rules { margin: 0 0 16px; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; }
+.sheet ul.rules b { color: var(--gold); }
+.order { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.order li { display: grid; grid-template-columns: 30px 1fr auto auto; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; background: var(--shade); border: 1px solid var(--line); }
+.order li.me-row { border-color: var(--gold); }
+.order li.imp-row { border-color: var(--accent); }
+.order .pl { font-family: var(--f-display); font-weight: 800; color: var(--gold); font-size: 18px; }
+.order .nm { font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.order .nm small { display: block; color: var(--muted); font-weight: 600; font-size: 11px; }
+.order .plus { font-weight: 800; color: var(--good); font-size: 13px; }
+.order .pts { font-variant-numeric: tabular-nums; font-weight: 800; text-align: right; min-width: 52px; }
+.order .pts small { display: block; color: var(--muted); font-weight: 600; font-size: 11px; }
+.sheet-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+
+@media (max-width: 560px) {
+  #btnRules, #btnScores, #btnLeave { display: none; }
+  #btnMenu { display: inline-block; }
+  .room-code { font-size: 40px; }
+  .card .word { font-size: 29px; }
+  .prow { grid-template-columns: minmax(0, 6em) 1fr auto; gap: 8px; padding: 8px 10px; }
+}
+@media (max-height: 560px) and (orientation: landscape) {
+  .brand p, .log { display: none; }
+  .card { padding: 8px 12px; }
+  .card .word { font-size: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="mask" viewBox="0 0 64 64"><path d="M6 20c8-6 18-8 26-8s18 2 26 8c0 16-6 30-26 34C12 50 6 36 6 20z" fill="#FF4D6D"/><path d="M14 27c3-4 9-5 13-1-3 4-9 5-13 1zM37 26c4-4 10-3 13 1-4 4-10 3-13-1z" fill="#17122B"/><path d="M25 41c4 3 10 3 14 0" stroke="#17122B" stroke-width="3" fill="none" stroke-linecap="round"/></symbol></svg>
+
+<section class="screen" id="home" hidden>
+  <div class="panel">
+    <div>
+      <h1 class="logo"><svg class="mask" aria-hidden="true"><use href="#mask"/></svg>Imposter</h1>
+      <p class="tagline">Everyone gets the same secret word, except one imposter. Say one word each, then vote out the faker.</p>
+    </div>
+    <label class="eyebrow" for="hName">Your name</label>
+    <input class="input" id="hName" maxlength="14" autocomplete="nickname" placeholder="Type your name">
+    <div class="block">
+      <h3>Play with friends, each on your own phone</h3>
+      <div id="onlineBox" class="row" style="flex-direction: column; align-items: stretch;">
+        <button class="btn primary" id="hCreate" type="button">Create a room</button>
+        <form class="row" id="joinForm">
+          <input class="input code-input grow" id="hCode" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false" style="width:auto">
+          <button class="btn" id="hJoin" type="submit">Join room</button>
+        </form>
+        <button class="btn" id="hReopen" type="button" hidden>Reopen your room</button>
+      </div>
+      <p class="note" id="onlineNote" hidden>Online rooms work on the website, not inside this preview: <a href="https://libyan11.github.io/imposter/" target="_blank" rel="noopener">libyan11.github.io/imposter</a></p>
+    </div>
+    <div class="block">
+      <h3>Pass one phone around</h3>
+      <p class="note">Everyone sits together. Each person looks at their card in turn, then you say your words out loud.</p>
+      <div class="names" id="hNames"></div>
+      <form class="row" id="nameForm">
+        <input class="input grow" id="hAddName" maxlength="14" placeholder="Add a player" autocomplete="off" style="width:auto">
+        <button class="btn" type="submit">Add</button>
+      </form>
+      <div class="set" id="hSet"></div>
+      <button class="btn primary" id="hSolo" type="button">Start passing the phone</button>
+      <button class="btn" id="hContinue" type="button" hidden>Continue your game</button>
+    </div>
+    <p class="msg" id="homeMsg" aria-live="polite"></p>
+    <div class="row"><button class="ghost" id="hRules" type="button">Rules</button></div>
+  </div>
+</section>
+
+<section class="screen" id="lobby" hidden>
+  <div class="panel">
+    <div>
+      <p class="eyebrow">Room code</p>
+      <div class="room-code" id="lCode">····</div>
+      <p class="note" id="lNet">Opening room…</p>
+    </div>
+    <div class="share">
+      <code id="lLink"></code>
+      <button class="ghost" id="lCopy" type="button">Copy link</button>
+    </div>
+    <p class="note" id="lCopyMsg" aria-live="polite"></p>
+    <div class="block">
+      <h3 id="lCount">Players</h3>
+      <ul class="plist" id="lPlayers"></ul>
+    </div>
+    <div class="block">
+      <h3>Settings</h3>
+      <div class="set" id="lSet"></div>
+      <button class="btn primary" id="lStart" type="button">Start game</button>
+      <p class="note" id="lNote"></p>
+    </div>
+    <div class="row"><button class="ghost" id="lRules" type="button">Rules</button><button class="ghost" id="lLeave" type="button">Leave room</button></div>
+  </div>
+</section>
+
+<div id="app" hidden>
+  <header class="top">
+    <div class="brand">
+      <h1>Imposter</h1>
+      <p><span id="roundNo">Round 1</span> <span class="net" id="net"></span></p>
+    </div>
+    <div class="top-actions">
+      <button class="ghost" id="btnRules" type="button">Rules</button>
+      <button class="ghost" id="btnScores" type="button">Scores</button>
+      <button class="ghost" id="btnLeave" type="button">Leave</button>
+      <button class="ghost" id="btnMenu" type="button" aria-label="Menu: rules, scores, leave">Menu</button>
+    </div>
+  </header>
+
+  <section id="card" aria-live="polite" aria-label="Your secret card"></section>
+
+  <section class="board" id="board" aria-label="Players and their clues"></section>
+
+  <section class="act" id="act" aria-live="polite">
+    <div class="status" id="status"></div>
+    <div class="sub" id="sub"></div>
+    <form class="clue-form" id="clueForm" hidden>
+      <input class="input" id="clueIn" maxlength="20" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="One word" enterkeyhint="send" aria-label="Your one-word clue">
+      <button class="btn primary" id="clueSend" type="submit">Send</button>
+    </form>
+    <div id="actMore"></div>
+  </section>
+
+  <details class="log" id="log">
+    <summary id="logLast">Game log</summary>
+    <ol id="logList" reversed></ol>
+  </details>
+</div>
+
+<div class="modal" id="modal" hidden>
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ================= constants & helpers ================= */
+const MAX_PLAYERS = 10, MIN_PLAYERS = 3, CHOICES = 8;
+const CATS = {
+  food: ['Food', 'Pizza,Banana,Chocolate,Bread,Rice,Soup,Ice cream,Burger,Pasta,Cheese,Egg,Apple,Watermelon,Popcorn,Honey,Salad,Cake,Coffee,Tea,Orange,Grapes,Sandwich,Falafel,Hummus,Dates,Couscous,Pancakes,Strawberry,Lemon,Carrot,Potato,Tomato,Olive,Cookie,Yogurt,Milk,Sushi,Shawarma,Donut,Chips'],
+  animals: ['Animals', 'Cat,Dog,Lion,Elephant,Giraffe,Camel,Horse,Monkey,Snake,Shark,Dolphin,Penguin,Eagle,Owl,Rabbit,Tiger,Bear,Zebra,Crocodile,Frog,Butterfly,Bee,Spider,Turtle,Kangaroo,Panda,Wolf,Fox,Cow,Sheep,Goat,Parrot,Octopus,Whale,Mouse,Ant,Deer,Bat,Peacock,Chicken'],
+  places: ['Places', 'Beach,Hospital,School,Airport,Library,Museum,Zoo,Cinema,Mosque,Restaurant,Supermarket,Park,Desert,Mountain,Gym,Bank,Hotel,Prison,Farm,Stadium,Kitchen,Bathroom,Market,Island,Forest,Castle,Train station,Swimming pool,Bakery,Barber shop,Police station,Office,Playground,Cave,Wedding hall,Car wash,Pharmacy,Petrol station,Garden,Hair salon'],
+  jobs: ['Jobs', 'Doctor,Teacher,Pilot,Chef,Police officer,Firefighter,Farmer,Dentist,Nurse,Engineer,Builder,Taxi driver,Barber,Tailor,Fisherman,Baker,Mechanic,Lawyer,Judge,Astronaut,Singer,Actor,Footballer,Photographer,Journalist,Soldier,Plumber,Electrician,Waiter,Cashier,Painter,Scientist,Programmer,Vet,Postman,Lifeguard,Magician,Detective,Shepherd,Carpenter'],
+  sports: ['Sports', 'Football,Basketball,Tennis,Swimming,Boxing,Running,Volleyball,Cycling,Golf,Karate,Skiing,Surfing,Horse riding,Wrestling,Table tennis,Bowling,Climbing,Ice skating,Baseball,Cricket,Handball,Diving,Fishing,Chess,Archery,Gymnastics,Rugby,Badminton,Hockey,Weightlifting,Fencing,Sailing,Darts,Snooker,Marathon,Yoga,Skateboarding,Rowing,Judo,Hiking'],
+  home: ['At home', 'Sofa,Bed,Fridge,Television,Pillow,Mirror,Lamp,Door,Window,Carpet,Clock,Oven,Washing machine,Toothbrush,Shower,Blanket,Chair,Table,Curtain,Spoon,Plate,Kettle,Phone charger,Remote control,Fan,Air conditioner,Broom,Towel,Key,Stairs,Bookshelf,Vacuum cleaner,Soap,Iron,Candle,Wardrobe,Doorbell,Microwave,Toaster,Dishwasher'],
+  transport: ['Transport', 'Car,Bus,Train,Plane,Bicycle,Motorbike,Boat,Ship,Helicopter,Taxi,Truck,Tractor,Rocket,Submarine,Scooter,Ambulance,Fire engine,Tram,Hot air balloon,Metro,Ferry,Jet ski,Canoe,Limousine,Police car,Cable car,Van,Spaceship,Sled,Yacht,Golf cart,Parachute,Escalator,Lift,Wheelchair,Pram,Roller skates,Horse cart,Bulldozer,Double-decker bus'],
+  nature: ['Nature & weather', 'Sun,Moon,Rain,Snow,Thunder,Rainbow,Volcano,River,Ocean,Tree,Flower,Cloud,Wind,Star,Sand,Rock,Waterfall,Lake,Earthquake,Fog,Ice,Fire,Storm,Grass,Leaf,Sunset,Lightning,Tornado,Palm tree,Rose,Cactus,Mushroom,Oasis,Glacier,Wave,Comet,Planet,Mud,Hail,Sky'],
+  clothes: ['Clothes & things you wear', 'Shirt,Trousers,Dress,Hat,Shoes,Socks,Jacket,Scarf,Gloves,Sunglasses,Watch,Ring,Necklace,Belt,Tie,Pyjamas,Hoodie,Jeans,Boots,Sandals,Cap,Suit,Swimsuit,Raincoat,Uniform,Backpack,Handbag,Earrings,Wallet,Umbrella,Slippers,Coat,Skirt,Sweater,Bracelet,Headphones,Crown,Mask,Apron,Abaya'],
+  world: ['Around the world', 'Egypt,Japan,Brazil,France,Italy,America,China,India,Mexico,Turkey,Libya,Morocco,Saudi Arabia,Dubai,London,Paris,New York,Tokyo,Cairo,Rome,Spain,Germany,Australia,Canada,Russia,Greece,Tunisia,Istanbul,Mecca,Venice,Switzerland,Argentina,Kenya,Iceland,Hawaii,Las Vegas,Antarctica,Sahara,North Pole,Amazon rainforest'],
+  fun: ['Fun & hobbies', 'Video games,Cooking,Reading,Drawing,Dancing,Singing,Camping,Gardening,Photography,Knitting,Jigsaw puzzle,Board games,Karaoke,Magic tricks,Shopping,Travelling,Painting,Guitar,Piano,Drums,Movies,Picnic,Barbecue,Birthday party,Wedding,Fireworks,Circus,Theme park,Roller coaster,Card games,Selfie,Social media,Podcast,Cartoons,Comics,Lego,Kite,Balloon,Treasure hunt,Hide and seek'],
+  school: ['School & work', 'Homework,Exam,Pencil,Eraser,Ruler,Notebook,Calculator,Classroom,Whiteboard,Lunchbox,Map,Globe,Scissors,Glue,Holidays,Timetable,Maths,Science,History,Art class,School bell,Break time,Graduation,Certificate,Laptop,Printer,Email,Meeting,Boss,Salary,Desk,Stapler,Projector,Dictionary,Alphabet,Microscope,Report card,Detention,Sports day,School bus']
+};
+Object.keys(CATS).forEach(k => { CATS[k] = { name: CATS[k][0], words: CATS[k][1].split(',') }; });
+const CAT_KEYS = Object.keys(CATS);
+const DEFAULT_OPTS = { cats: CAT_KEYS.slice(), laps: 2, hint: true, say: false };
+
+const LS = (() => { try { return window.localStorage; } catch (e) { return null; } })();
+const SS = (() => { try { return window.sessionStorage; } catch (e) { return null; } })();
+function getItem(st, k) { try { const v = st && st.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
+function setItem(st, k, v) { try { if (!st) return; if (v == null) st.removeItem(k); else st.setItem(k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } }
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const rid = () => Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+/* compare words without caring about case, spaces, accents or a plural s */
+function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9؀-ۿ]/g, ''); }
+function givesAway(clue, word) {
+  const c = norm(clue), w = norm(word);
+  if (!c || !w) return false;
+  if (c === w || c === w + 's' || c + 's' === w || c === w + 'es') return true;
+  return w.length >= 4 && c.includes(w);
+}
+function cleanClue(s) { return String(s || '').trim().replace(/\s+/g, ' ').slice(0, 20); }
+function okClue(s) { return !!s && !/\s/.test(s); }
+function fixOpts(o) {
+  o = Object.assign({}, DEFAULT_OPTS, o || {});
+  o.cats = (Array.isArray(o.cats) ? o.cats : []).filter(k => CATS[k]);
+  if (!o.cats.length) o.cats = CAT_KEYS.slice();
+  o.laps = Math.max(1, Math.min(3, +o.laps || 2));
+  o.hint = o.hint !== false; o.say = !!o.say;
+  return o;
+}
+
+const me = (() => { let id = getItem(SS, 'im-id'); if (!id) { id = rid(); setItem(SS, 'im-id', id); } return id; })();
+let myName = getItem(LS, 'im-name') || '';
+const onlineOK = !/claude|anthropic/i.test(location.hostname) && location.protocol !== 'data:';
+
+let role = null;      // 'solo' (pass one phone) | 'host' | 'guest' | null
+let roomCode = '';
+let S = null;         // full game state (solo and host only)
+let V = null;         // what this screen shows
+let timer = null, token = 0;
+let pickFor = '', shownOver = null;
+let homeMsg = '', homeErr = false;
+let homeOpts = fixOpts(getItem(LS, 'im-opts'));
+let passNames = (getItem(LS, 'im-names') || []).filter(n => typeof n === 'string').slice(0, MAX_PLAYERS);
+let votePick = -1, cardHidden = false, hiddenFor = '';
+
+/* ================= game engine (runs on the host / solo device) ================= */
+function newPlayer(id, name) { return { id, name, online: true, score: 0 }; }
+function idxOf(pid) { return S.players.findIndex(p => p.id === pid); }
+function addLog(t) { S.log.push(t); if (S.log.length > 80) S.log.shift(); }
+function isPass() { return S.mode === 'solo'; }
+function present(i) { const p = S.players[i]; return !!p && (isPass() || p.online); }
+
+function baseState(mode, opts) {
+  return { v: 1, mode, hostId: me, players: [], waiting: [], phase: 'lobby', round: 0, opts: fixOpts(opts),
+    cat: '', word: '', imp: -1, lastImp: -1, order: [], lap: 0, turn: 0, clues: [], votes: {}, accused: -1,
+    choices: [], guess: null, result: null, used: [], pass: 0, shown: false, peek: false, back: '', log: [] };
+}
+
+function seatWaiting() {
+  while (S.waiting.length && S.players.length < MAX_PLAYERS) {
+    const w = S.waiting.shift();
+    const p = newPlayer(w.id, w.name);
+    p.online = w.online !== false;
+    S.players.push(p);
+  }
+}
+
+function newRound() {
+  token++; clearTimeout(timer);
+  seatWaiting();
+  const n = S.players.length;
+  S.round++;
+  /* a fresh word from the chosen categories, not repeated until they run out */
+  let pool = [];
+  S.opts.cats.forEach(k => CATS[k].words.forEach(w => { if (!S.used.includes(k + ':' + w)) pool.push([k, w]); }));
+  if (!pool.length) { S.used = []; S.opts.cats.forEach(k => CATS[k].words.forEach(w => pool.push([k, w]))); }
+  const [cat, word] = pick(pool);
+  S.used.push(cat + ':' + word);
+  S.cat = cat; S.word = word;
+  const others = shuffle(CATS[cat].words.filter(w => w !== word)).slice(0, CHOICES - 1);
+  S.choices = shuffle(others.concat(word));
+  /* the imposter: anyone here, but the same person rarely twice in a row */
+  const can = S.players.map((p, i) => i).filter(i => present(i));
+  let imp = pick(can.length ? can : S.players.map((p, i) => i));
+  if (imp === S.lastImp && can.length > 1 && Math.random() < 0.75) imp = pick(can.filter(i => i !== imp));
+  S.imp = imp; S.lastImp = imp;
+  /* speaking order starts with a different person each round, and never with the imposter */
+  let start = (S.round - 1) % n;
+  if (start === imp) start = (start + 1) % n;
+  S.order = [];
+  for (let k = 0; k < n; k++) { const i = (start + k) % n; if (present(i)) S.order.push(i); }
+  if (S.order[0] === imp && S.order.length > 1) S.order.push(S.order.shift());
+  S.lap = 0; S.turn = 0; S.clues = []; S.votes = {}; S.accused = -1; S.guess = null; S.result = null;
+  S.players.forEach(p => { p.got = 0; });
+  addLog(`Round ${S.round}: a new secret word.`);
+  if (isPass()) { S.phase = 'cards'; S.pass = 0; S.shown = false; S.peek = false; }
+  else S.phase = S.opts.say ? 'talk' : 'clue';
+  step();
+}
+
+function schedule(fn, ms) {
+  clearTimeout(timer);
+  const t = token;
+  timer = setTimeout(() => { if (t === token) fn(); }, ms);
+}
+function curSpeaker() { return S.order[S.turn]; }
+function step() {
+  changed();
+  if (S.phase === 'clue') {
+    const pi = curSpeaker();
+    if (!present(pi)) schedule(() => { if (S.phase === 'clue' && curSpeaker() === pi) doClue(pi, null); }, 8000);
+  } else if (S.phase === 'vote') {
+    if (allVoted()) resolveVote();
+  } else if (S.phase === 'guess') {
+    if (!present(S.imp)) schedule(() => { if (S.phase === 'guess') doGuess(S.imp, null); }, 15000);
+  }
+}
+
+function doClue(pi, w) {
+  if (S.phase !== 'clue' || curSpeaker() !== pi) return;
+  if (w != null) {
+    w = cleanClue(w);
+    if (!okClue(w)) return;
+    if (pi !== S.imp && givesAway(w, S.word)) return;
+  }
+  clearTimeout(timer);
+  S.clues.push({ pi, lap: S.lap, w: w == null ? null : w });
+  addLog(w == null ? `${S.players[pi].name} was skipped.` : `${S.players[pi].name}: "${w}"`);
+  S.turn++;
+  if (S.turn >= S.order.length) {
+    S.turn = 0; S.lap++;
+    if (S.lap >= S.opts.laps) { toVote(); return; }
+  }
+  step();
+}
+function toVote() {
+  token++; clearTimeout(timer);
+  S.phase = 'vote'; S.votes = {};
+  addLog('Time to vote: who is the imposter?');
+  step();
+}
+function voters() { return S.players.map((p, i) => i).filter(i => present(i)); }
+function allVoted() { const v = voters(); return v.length > 0 && v.every(i => S.votes[i] != null); }
+function doVote(pi, to) {
+  if (S.phase !== 'vote') return;
+  to = +to;
+  if (!(to >= 0 && to < S.players.length)) return;
+  if (isPass()) { S.votes = {}; S.accused = to; finishVote(); return; }
+  if (pi < 0 || to === pi) return;
+  S.votes[pi] = to;
+  step();
+}
+function resolveVote() {
+  const tally = S.players.map(() => 0);
+  Object.values(S.votes).forEach(t => { if (tally[t] != null) tally[t]++; });
+  const top = Math.max(0, ...tally);
+  const lead = tally.map((c, i) => i).filter(i => top > 0 && tally[i] === top);
+  S.accused = lead.length === 1 ? lead[0] : -1;
+  finishVote();
+}
+function finishVote() {
+  token++; clearTimeout(timer);
+  const imp = S.players[S.imp];
+  if (S.accused === S.imp) {
+    S.phase = 'guess';
+    if (isPass()) { S.shown = false; }
+    addLog(`${imp.name} was voted out, and was the imposter! One chance to guess the word.`);
+    step();
+  } else {
+    addLog(S.accused < 0 ? 'The vote was a tie, so nobody was voted out.' : `${S.players[S.accused].name} was voted out, but wasn't the imposter.`);
+    finish(S.accused < 0 ? 'tie' : 'wrong');
+  }
+}
+function doGuess(pi, w) {
+  if (S.phase !== 'guess' || pi !== S.imp) return;
+  if (w != null && !S.choices.includes(w)) return;
+  S.guess = w;
+  const right = w === S.word;
+  addLog(w == null ? `${S.players[pi].name} ran out of time to guess.` : `${S.players[pi].name} guessed "${w}": ${right ? 'right!' : 'wrong.'}`);
+  finish(right ? 'guessed' : 'caught');
+}
+/* points: the imposter gets 2 for getting away or guessing the word; otherwise every other player gets 1.
+   In rooms, everyone who voted for the imposter gets 1 more. */
+function finish(how) {
+  token++; clearTimeout(timer);
+  const impWins = how !== 'caught';
+  const pts = S.players.map(() => 0);
+  if (impWins) pts[S.imp] += 2;
+  else pts.forEach((x, i) => { if (i !== S.imp) pts[i] += 1; });
+  if (!isPass()) Object.keys(S.votes).forEach(v => { if (+v !== S.imp && S.votes[v] === S.imp) pts[+v] += 1; });
+  S.players.forEach((p, i) => { p.score += pts[i]; p.got = pts[i]; });
+  const tally = S.players.map(() => 0);
+  Object.values(S.votes).forEach(t => { if (tally[t] != null) tally[t]++; });
+  S.result = { how, impWins, pts, tally, votes: Object.assign({}, S.votes) };
+  S.phase = 'end';
+  addLog(`The word was "${S.word}". ${impWins ? S.players[S.imp].name + ' (the imposter) wins the round.' : 'The others win the round.'}`);
+  step();
+}
+
+/* host-side handling of every player's actions */
+function handleAct(pid, act, data) {
+  if (!S) return;
+  data = data || {};
+  const pi = idxOf(pid);
+  const isHost = pid === S.hostId;
+  if (act === 'clue') { if (pi >= 0) doClue(pi, data.w); return; }
+  if (act === 'vote') { if (pi >= 0 || isPass()) doVote(pi, data.to); return; }
+  if (act === 'guess') { if (isPass() ? isHost : pi >= 0) doGuess(isPass() ? S.imp : pi, data.w == null ? null : String(data.w)); return; }
+  if (!isHost) return;
+  if (act === 'remove') {
+    if (S.phase !== 'lobby' || data.id === S.hostId) return;
+    const i = idxOf(data.id);
+    if (i < 0) return;
+    S.players.splice(i, 1);
+    conns.forEach(c => { if (c.pid === data.id) { try { c.send({ t: 'kicked' }); } catch (e) { /* gone */ } } });
+    changed();
+  } else if (act === 'settings') {
+    if (S.phase !== 'lobby' && S.phase !== 'end') return;
+    S.opts = fixOpts(data);
+    changed();
+  } else if (act === 'start') {
+    if (S.phase !== 'lobby' || S.players.length + S.waiting.length < MIN_PLAYERS) return;
+    newRound();
+  } else if (act === 'next') {
+    if (S.phase === 'end' && S.players.length + S.waiting.length >= MIN_PLAYERS) newRound();
+  } else if (act === 'skip') {
+    if (S.phase === 'clue') doClue(curSpeaker(), null);
+  } else if (act === 'toVote') {
+    if (S.phase === 'talk' || S.phase === 'clue') toVote();
+  } else if (act === 'closeVote') {
+    if (S.phase === 'vote' && !isPass()) resolveVote();
+  } else if (act === 'show') {
+    if (S.phase === 'cards' || S.phase === 'guess') { S.shown = true; changed(); }
+  } else if (act === 'passed') {
+    if (S.phase !== 'cards') return;
+    S.shown = false;
+    if (S.peek) { S.peek = false; S.phase = S.back || 'talk'; }
+    else if (++S.pass >= S.players.length) { S.phase = 'talk'; S.pass = 0; addLog('Everyone has seen their card. Start talking!'); }
+    changed();
+  } else if (act === 'peek') {
+    const i = +data.i;
+    if (!isPass() || (S.phase !== 'talk' && S.phase !== 'vote') || !(i >= 0 && i < S.players.length)) return;
+    S.back = S.phase; S.phase = 'cards'; S.peek = true; S.pass = i; S.shown = false;
+    changed();
+  } else if (act === 'lobby') {
+    if (S.phase !== 'end' || isPass()) return;
+    seatWaiting();
+    S.phase = 'lobby';
+    changed();
+  }
+}
+
+/* what each player may see: your own card only; votes stay secret until the vote is over */
+function cardFor(i) {
+  if (i < 0 || !S.word) return null;
+  return i === S.imp ? { imp: true, cat: S.opts.hint ? CATS[S.cat].name : null } : { word: S.word, cat: CATS[S.cat].name };
+}
+function viewFor(pid) {
+  const idx = S.players.findIndex(p => p.id === pid);
+  const pass = isPass();
+  const ended = S.phase === 'end';
+  const v = JSON.parse(JSON.stringify({ mode: S.mode, phase: S.phase, round: S.round, opts: S.opts, order: S.order, lap: S.lap, turn: S.turn,
+    clues: S.clues, accused: S.accused, guess: S.guess, result: S.result, log: S.log, hostId: S.hostId, waiting: S.waiting.map(w => w.name),
+    pass: S.pass, shown: S.shown, peek: S.peek }));
+  v.me = pass ? -1 : idx;
+  v.players = S.players.map(p => ({ id: p.id, name: p.name, online: p.online, score: p.score, got: p.got || 0 }));
+  v.catName = S.cat ? CATS[S.cat].name : '';
+  v.card = pass ? (S.phase === 'cards' && S.shown ? cardFor(S.pass) : null) : (S.phase === 'lobby' ? null : cardFor(idx));
+  v.imp = ended || S.phase === 'guess' ? S.imp : -1;
+  v.word = ended ? S.word : null;
+  v.choices = S.phase === 'guess' && (pass ? S.shown : idx === S.imp) ? S.choices.slice() : ended ? S.choices.slice() : null;
+  v.voted = S.players.map((p, i) => S.votes[i] != null);
+  v.myVote = idx >= 0 && S.votes[idx] != null ? S.votes[idx] : -1;
+  return v;
+}
+
+function changed() {
+  if (role === 'host') broadcast();
+  if (role === 'host' || role === 'solo') {
+    V = viewFor(me);
+    if (role === 'solo') setItem(LS, 'im-solo', S);
+    else setItem(LS, 'im-host', { code: roomCode, S });
+  }
+  render();
+}
+
+/* ================= networking (host-authoritative rooms) =================
+   A direct phone-to-phone link (PeerJS) is tried first. Public MQTT relays carry the same
+   messages as a backup when a network blocks the direct link. */
+const PEER_PREFIX = 'gamenight-imposter-room-';
+const RELAYS = [
+  ['wss://public.cloud.shiftr.io:443', { username: 'public', password: 'public' }],
+  ['wss://broker.hivemq.com:8884/mqtt', {}],
+  ['wss://broker.emqx.io:8084/mqtt', {}]
+];
+const RELAY_ROOT = 'gamenight-imposter-v1/';
+let peer = null, hostConn = null, link = null, everConnected = false;
+const conns = new Set(), relayConns = new Map();
+let stateSeq = 0, hostSess = '', lastState = { hs: null, sv: 0 };
+let fallbackTimer = 0, giveUpTimer = 0, retryTimer = 0, helloIv = 0, beatIv = 0, lastHostMsg = 0;
+const relay = { clients: [], seq: 0, sess: '', seen: new Map() };
+
+function netReady() { return typeof Peer !== 'undefined' || typeof mqtt !== 'undefined'; }
+let netWait = false;
+function waitNet(fn) { if (window.NET_DONE) return false; if (!netWait) { netWait = true; NET.then(() => { netWait = false; fn(); }); } return true; }
+function newCode() { const a = 'ABCDEFGHJKMNPQRSTUVWXYZ'; let c = ''; for (let i = 0; i < 4; i++) c += a[Math.floor(Math.random() * a.length)]; return c; }
+function peerIdFor(code) { return PEER_PREFIX + code.toLowerCase(); }
+function roomTopic(rest) { return 'room/' + roomCode.toLowerCase() + '/' + rest; }
+let netText = '', netWarn = false;
+function setNet(text, warn) { netText = text || ''; netWarn = !!warn; renderNet(); }
+
+function relayStart(listen, onMsg) {
+  relayStop();
+  if (typeof mqtt === 'undefined') return;
+  relay.sess = Math.random().toString(36).slice(2, 8);
+  const topic = RELAY_ROOT + listen;
+  relay.clients = RELAYS.map(([url, o]) => {
+    let c;
+    try { c = mqtt.connect(url, Object.assign({}, o, { clientId: 'im-' + me + '-' + Math.random().toString(36).slice(2, 6), connectTimeout: 10000, reconnectPeriod: 4000, keepalive: 30 })); }
+    catch (e) { return null; }
+    c.on('connect', () => c.subscribe(topic));
+    c.on('message', (t, buf) => {
+      let env; try { env = JSON.parse(buf.toString()); } catch (e) { return; }
+      if (!env || !env.id || env.f === me || relay.seen.has(env.id)) return;
+      relay.seen.set(env.id, 1);
+      if (relay.seen.size > 600) relay.seen.delete(relay.seen.keys().next().value);
+      onMsg(env.m, String(env.f || ''));
+    });
+    c.on('error', () => {});
+    return c;
+  }).filter(Boolean);
+}
+function relaySend(to, m) {
+  const env = JSON.stringify({ f: me, id: me + '.' + relay.sess + '.' + (++relay.seq), m });
+  relay.clients.forEach(c => { if (c.connected) { try { c.publish(RELAY_ROOT + to, env); } catch (e) { /* skip */ } } });
+}
+function relayStop() {
+  relay.clients.forEach(c => { try { c.end(true); } catch (e) { /* skip */ } });
+  relay.clients = []; relay.seen.clear();
+}
+
+/* ---- host ---- */
+function broadcast() {
+  const sv = ++stateSeq;
+  conns.forEach(c => { if (c.open && c.pid) { try { c.send({ t: 'state', v: viewFor(c.pid), hs: hostSess, sv }); } catch (e) { /* dropped */ } } });
+}
+function startHostRelay() {
+  relayConns.clear();
+  relayStart(roomTopic('host'), (m, f) => {
+    if (role !== 'host' || !m || !f) return;
+    let c = relayConns.get(f);
+    if (!c) {
+      if (m.t !== 'hello') return;
+      c = { relay: true, from: f, pid: null, open: true, seen: 0, send: x => relaySend(roomTopic('g/' + f), x), close() { this.open = false; } };
+      relayConns.set(f, c);
+    }
+    c.seen = Date.now();
+    if (m.t !== 'ping') hostReceive(c, m);
+  });
+  clearInterval(beatIv);
+  /* every guest pings every 5s; anyone silent for 15-20s is treated as gone, and the computer covers their turns */
+  beatIv = setInterval(() => {
+    const now = Date.now();
+    relayConns.forEach((c, f) => { if (now - c.seen > 20000) { relayConns.delete(f); c.open = false; hostDrop(c); } });
+    conns.forEach(c => {
+      if (!c.relay && c.seen && now - c.seen > 15000) { try { c.close(); } catch (e) { /* skip */ } hostDrop(c); }
+      else { try { c.send({ t: 'ping' }); } catch (e) { /* skip */ } }
+    });
+  }, 5000);
+}
+function openHostPeer(attempt) {
+  attempt = attempt || 0;
+  if (typeof Peer === 'undefined') { setNet('Room open · backup link'); return; }
+  setNet('Opening room…', true);
+  peer = new Peer(peerIdFor(roomCode), { debug: 1 });
+  peer.on('open', () => setNet('Room open'));
+  peer.on('connection', c => {
+    c.on('data', m => hostReceive(c, m));
+    c.on('close', () => hostDrop(c));
+    c.on('error', () => hostDrop(c));
+  });
+  peer.on('disconnected', () => { setNet('Reconnecting…', true); setTimeout(() => { try { if (peer && !peer.destroyed) peer.reconnect(); } catch (e) { /* skip */ } }, 1500); });
+  peer.on('error', e => {
+    if (e.type === 'unavailable-id' && attempt < 12) {
+      setNet('Reopening room…', true);
+      try { peer.destroy(); } catch (x) { /* skip */ }
+      setTimeout(() => { if (role === 'host') openHostPeer(attempt + 1); }, 3000);
+    } else if (e.type !== 'peer-unavailable') setNet('Connection problem (' + e.type + ')', true);
+  });
+}
+function hostReceive(c, m) {
+  if (!m || typeof m !== 'object' || !S) return;
+  c.seen = Date.now();
+  if (m.t === 'ping') return;
+  if (m.t === 'away' && c.pid) {
+    conns.delete(c);
+    const p = S.players.find(x => x.id === c.pid);
+    if (p) p.online = false;
+    const w = S.waiting.find(x => x.id === c.pid);
+    if (w) w.online = false;
+    afterPresence();
+    return;
+  }
+  if (m.t === 'hello') {
+    const pid = String(m.cid || '').slice(0, 24);
+    if (!pid || pid === S.hostId) { try { c.close(); } catch (e) { /* skip */ } return; }
+    const name = String(m.name || '').trim().slice(0, 14) || 'Player';
+    c.pid = pid; conns.add(c);
+    let p = S.players.find(x => x.id === pid);
+    if (!p) {
+      p = S.players.find(x => !x.bot && !x.online && x.id !== S.hostId && x.name.toLowerCase() === name.toLowerCase());
+      if (p) p.id = pid;
+    }
+    if (p) { p.name = name; p.online = true; afterPresence(); return; }
+    const w = S.waiting.find(x => x.id === pid);
+    if (w) { w.name = name; w.online = true; changed(); return; }
+    if (S.phase === 'lobby') {
+      if (S.players.length < MAX_PLAYERS) S.players.push(newPlayer(pid, name, false));
+      else {
+        const b = S.players.map(x => x.bot).lastIndexOf(true);
+        if (b < 0) { try { c.send({ t: 'full' }); } catch (e) { /* skip */ } conns.delete(c); return; }
+        S.players[b] = newPlayer(pid, name, false);
+      }
+    } else S.waiting.push({ id: pid, name, online: true });
+    addLog(`${name} joined the room.`);
+    changed();
+    return;
+  }
+  if (m.t === 'bye' && c.pid) {
+    const i = idxOf(c.pid);
+    if (S.phase === 'lobby' && i >= 0) S.players.splice(i, 1);
+    S.waiting = S.waiting.filter(w => w.id !== c.pid);
+    conns.delete(c);
+    if (S.phase !== 'lobby' && i >= 0 && S.players[i] && S.players[i].id === c.pid) { S.players[i].online = false; afterPresence(); return; }
+    changed();
+    return;
+  }
+  if (m.t === 'act' && c.pid) handleAct(c.pid, String(m.act), m.data);
+}
+function hostDrop(c) {
+  if (!conns.has(c)) return;
+  conns.delete(c);
+  if (c.pid && ![...conns].some(x => x.pid === c.pid)) {
+    const p = S && S.players.find(x => x.id === c.pid);
+    if (p) p.online = false;
+    const w = S && S.waiting.find(x => x.id === c.pid);
+    if (w) w.online = false;
+    afterPresence();
+  }
+}
+function afterPresence() {
+  if (!S) return;
+  step();
+}
+function normalizeHost() {
+  S.players.forEach(p => { if (!p.bot) p.online = p.id === me; });
+  S.waiting.forEach(w => { w.online = false; });
+  token++; clearTimeout(timer);
+  if (S.phase !== 'lobby') step();
+}
+
+/* ---- guest ---- */
+function joinRoom(code) {
+  role = 'guest'; roomCode = code; V = null; everConnected = false; link = null; lastState = { hs: null, sv: 0 };
+  homeMsg = 'Connecting to room ' + code + '…'; homeErr = false;
+  render();
+  setNet('Connecting…', true);
+  relayStart(roomTopic('g/' + me), guestRelayMsg);
+  clearTimeout(fallbackTimer); fallbackTimer = setTimeout(useRelay, 4000);
+  clearTimeout(giveUpTimer);
+  giveUpTimer = setTimeout(() => {
+    if (role === 'guest' && !everConnected) leave(`Couldn't reach room ${code}. Check the code, and that the host still has the game open.`);
+  }, 25000);
+  clearInterval(beatIv);
+  beatIv = setInterval(() => {
+    if (role !== 'guest' || !link || !hostConn) return;
+    try { hostConn.send({ t: 'ping' }); } catch (e) { /* skip */ }
+    if (Date.now() - lastHostMsg > 16000) {
+      setNet('Lost the host. Reconnecting…', true);
+      if (link === 'relay') hostConn.send({ t: 'hello', cid: me, name: myName });
+      else { link = null; hostConn = null; lastHostMsg = Date.now(); retryLater(); useRelay(); }
+    }
+  }, 5000);
+  if (typeof Peer === 'undefined') { useRelay(); return; }
+  peer = new Peer({ debug: 1 });
+  peer.on('open', connectHost);
+  peer.on('disconnected', () => { setTimeout(() => { try { if (peer && !peer.destroyed) peer.reconnect(); } catch (e) { /* skip */ } }, 1500); });
+  peer.on('error', e => {
+    if (link === 'relay') return;
+    useRelay();
+    setNet(e.type === 'peer-unavailable' ? (everConnected ? 'Host not reachable. Retrying…' : 'Trying another way to reach the room…') : 'Connection problem. Retrying…', true);
+    retryLater();
+  });
+}
+function linked(how) {
+  everConnected = true; link = how; clearTimeout(giveUpTimer); lastHostMsg = Date.now();
+  setNet('Connected' + (how === 'relay' ? ' · backup link' : ''));
+  setItem(LS, 'im-guest', { code: roomCode });
+}
+function useRelay() {
+  if (role !== 'guest' || link === 'peer' || helloIv) return;
+  const hello = () => {
+    if (role !== 'guest' || link) { clearInterval(helloIv); helloIv = 0; return; }
+    relaySend(roomTopic('host'), { t: 'hello', cid: me, name: myName });
+  };
+  helloIv = setInterval(hello, 2000); hello();
+}
+function relayHostConn() { return { relay: true, open: true, send: m => relaySend(roomTopic('host'), m) }; }
+function guestRelayMsg(m) {
+  if (role !== 'guest' || !m) return;
+  lastHostMsg = Date.now();
+  if (m.t !== 'state' && m.t !== 'full' && m.t !== 'kicked' && m.t !== 'closed') return;
+  if (m.t === 'state' && link !== 'peer' && link !== 'relay') { hostConn = relayHostConn(); linked('relay'); }
+  else if (link === 'relay') setNet('Connected · backup link');
+  if (link === 'relay' || m.t !== 'state') guestMsg(m);
+}
+function guestMsg(m) {
+  if (!m) return;
+  if (m.t === 'full') { leave('That room is full. Rooms hold 10 players.'); return; }
+  if (m.t === 'kicked') { leave('The host removed you from the room.'); return; }
+  if (m.t === 'closed') { leave('The host closed the room.'); return; }
+  if (m.t !== 'state') return;
+  if (m.hs === lastState.hs && m.sv <= lastState.sv) return;
+  lastState = { hs: m.hs, sv: m.sv };
+  V = m.v;
+  render();
+}
+function connectHost() {
+  if (!peer || peer.destroyed || role !== 'guest') return;
+  const c = peer.connect(peerIdFor(roomCode), { reliable: true });
+  if (!link) hostConn = c;
+  c.on('open', () => { hostConn = c; c.send({ t: 'hello', cid: me, name: myName }); linked('peer'); });
+  c.on('data', m => { if (link === 'peer' && hostConn === c) { lastHostMsg = Date.now(); guestMsg(m); } });
+  c.on('close', () => {
+    if (role === 'guest' && hostConn === c) { link = null; hostConn = null; setNet('Lost the host. Reconnecting…', true); retryLater(); useRelay(); }
+  });
+}
+function retryLater() {
+  clearTimeout(retryTimer);
+  retryTimer = setTimeout(() => {
+    if (!peer || peer.destroyed || role !== 'guest') return;
+    if (peer.disconnected) { try { peer.reconnect(); } catch (e) { /* skip */ } setTimeout(connectHost, 1500); }
+    else connectHost();
+  }, 2500);
+}
+
+/* ---- shared ---- */
+function act(name, data) {
+  if (role === 'guest') { if (hostConn && hostConn.open) hostConn.send({ t: 'act', act: name, data }); }
+  else if (S) handleAct(me, name, data);
+}
+
+function leave(msg) {
+  if (role === 'guest' && hostConn && hostConn.open) { try { hostConn.send({ t: 'bye' }); } catch (e) { /* skip */ } }
+  if (role === 'host') conns.forEach(c => { try { c.send({ t: 'closed' }); } catch (e) { /* skip */ } });
+  token++; clearTimeout(timer);
+  clearTimeout(retryTimer); clearTimeout(fallbackTimer); clearTimeout(giveUpTimer); clearInterval(helloIv); clearInterval(beatIv); helloIv = 0;
+  const p = peer; setTimeout(() => { try { p && p.destroy(); } catch (e) { /* skip */ } }, 300);
+  setTimeout(relayStop, 300);
+  relayConns.clear(); conns.clear(); link = null; peer = null; hostConn = null;
+  if (role === 'host') setItem(LS, 'im-host', null);
+  if (role === 'guest') setItem(LS, 'im-guest', null);
+  role = null; S = null; V = null; roomCode = ''; pickFor = ''; shownOver = null; votePick = -1;
+  homeMsg = msg || ''; homeErr = !!msg;
+  setNet('');
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  closeModal();
+  render();
+}
+
+/* ================= rendering ================= */
+function myPlayer() { return V && V.me >= 0 ? V.players[V.me] : null; }
+function isRoomHost() { return role === 'host' || role === 'solo'; }
+function speaker() { return V && V.phase === 'clue' ? V.order[V.turn] : -1; }
+function myTurn() { return !!(V && role !== 'solo' && V.me >= 0 && ((V.phase === 'clue' && speaker() === V.me) || (V.phase === 'vote' && V.myVote < 0) || (V.phase === 'guess' && V.imp === V.me))); }
+function nm(i) { const p = V.players[i]; return p ? (p.id === me && role !== 'solo' ? 'You' : p.name) : '?'; }
+
+function render() {
+  const screen = !role || (role === 'guest' && !V) ? 'home' : V && V.phase === 'lobby' ? 'lobby' : 'game';
+  if (screen !== 'game') { document.title = 'Imposter · Game Night'; wasMyTurn = false; if (screen === 'home' && wakeLock) { try { wakeLock.release(); } catch (e) { /* skip */ } wakeLock = null; } }
+  $('home').hidden = screen !== 'home';
+  $('lobby').hidden = screen !== 'lobby';
+  $('app').hidden = screen !== 'game';
+  if (screen === 'home') renderHome();
+  else if (screen === 'lobby') renderLobby();
+  else renderGame();
+}
+
+function renderNet() {
+  const el = $('net');
+  el.textContent = role === 'host' || role === 'guest' ? `· Room ${roomCode} · ${netText}` : '';
+  el.className = 'net' + (netWarn ? ' warn' : '');
+  $('lNet').textContent = netText || ' ';
+}
+
+/* the settings block, used on the home screen (pass the phone) and in the room lobby */
+function settingsHTML(o, edit, room) {
+  const dis = edit ? '' : ' disabled';
+  return `<p class="eyebrow">Word categories</p>
+    <div class="cats">${CAT_KEYS.map(k => `<button class="chip" type="button" data-cat="${k}" aria-pressed="${o.cats.includes(k)}"${dis}>${esc(CATS[k].name)}</button>`).join('')}</div>
+    <label class="check">Clue rounds <select class="input" data-opt="laps"${dis}>${[1, 2, 3].map(n => `<option value="${n}"${o.laps === n ? ' selected' : ''}>${n === 1 ? 'Once around' : n === 2 ? 'Twice around' : 'Three times around'}</option>`).join('')}</select></label>
+    <label class="check"><input type="checkbox" data-opt="hint"${o.hint ? ' checked' : ''}${dis}> Tell the imposter the category</label>
+    ${room ? `<label class="check"><input type="checkbox" data-opt="say"${o.say ? ' checked' : ''}${dis}> Say the words out loud instead of typing (you're all in the same room)</label>` : ''}`;
+}
+function readSettings(el, o, e) {
+  o = fixOpts(o);
+  const chip = e.target.closest('[data-cat]');
+  if (chip) {
+    const k = chip.dataset.cat;
+    o.cats = o.cats.includes(k) ? o.cats.filter(x => x !== k) : o.cats.concat(k);
+    if (!o.cats.length) o.cats = [k];
+    return o;
+  }
+  const f = e.target.closest('[data-opt]');
+  if (!f) return null;
+  if (f.dataset.opt === 'laps') o.laps = +f.value; else o[f.dataset.opt] = f.checked;
+  return o;
+}
+
+function renderHome() {
+  if (document.activeElement !== $('hName')) $('hName').value = myName;
+  $('onlineBox').hidden = !onlineOK;
+  $('onlineNote').hidden = onlineOK;
+  const savedHost = getItem(LS, 'im-host');
+  $('hReopen').hidden = !(savedHost && savedHost.code && role !== 'guest');
+  if (savedHost && savedHost.code) $('hReopen').textContent = `Reopen your room ${savedHost.code}`;
+  const solo = getItem(LS, 'im-solo');
+  $('hContinue').hidden = !(solo && solo.v === 1 && solo.phase !== 'lobby');
+  $('hCreate').disabled = $('hJoin').disabled = role === 'guest';
+  $('hNames').innerHTML = passNames.length
+    ? passNames.map((n, i) => `<button class="chip" type="button" data-drop="${i}" aria-label="Remove ${esc(n)}">${esc(n)} <b aria-hidden="true">×</b></button>`).join('')
+    : '<p class="note">Add everyone who is playing, 3 to 10 people.</p>';
+  $('hAddName').disabled = passNames.length >= MAX_PLAYERS;
+  if (!$('hSet').contains(document.activeElement)) $('hSet').innerHTML = settingsHTML(homeOpts, true, false);
+  $('hSolo').disabled = passNames.length < MIN_PLAYERS;
+  $('hSolo').textContent = passNames.length < MIN_PLAYERS ? `Add ${MIN_PLAYERS - passNames.length} more player${MIN_PLAYERS - passNames.length === 1 ? '' : 's'}` : `Start with ${passNames.length} players`;
+  const m = $('homeMsg');
+  m.textContent = homeMsg; m.className = 'msg' + (homeErr ? ' err' : '');
+}
+
+function shareLink() { return location.origin + location.pathname + '#' + roomCode; }
+
+function renderLobby() {
+  renderNet();
+  $('lCode').textContent = roomCode;
+  $('lLink').textContent = shareLink();
+  $('lCopy').textContent = navigator.share ? 'Share link' : 'Copy link';
+  const host = role === 'host';
+  const n = V.players.length;
+  $('lCount').textContent = `Players (${n} of ${MAX_PLAYERS})`;
+  $('lPlayers').innerHTML = V.players.map(p => {
+    const tag = p.id === V.hostId ? 'Host' : p.online ? '' : 'Away';
+    const rm = host && p.id !== V.hostId ? `<button class="x" type="button" data-remove="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">Remove</button>` : '';
+    return `<li><span class="dot ${p.online ? '' : 'off'}" aria-hidden="true"></span><span class="nm">${esc(p.name)}${p.id === me ? ' (you)' : ''}</span><span class="note">${tag}</span>${rm}</li>`;
+  }).join('') + (V.waiting.length ? `<li><span class="nm note">Waiting: ${esc(V.waiting.join(', '))}</span></li>` : '');
+  if (!$('lSet').contains(document.activeElement) || !host) $('lSet').innerHTML = settingsHTML(V.opts, host, true);
+  $('lStart').hidden = !host;
+  $('lStart').disabled = n < MIN_PLAYERS;
+  $('lNote').textContent = host
+    ? (n < MIN_PLAYERS ? `You need at least ${MIN_PLAYERS} players. Share the code with your friends.` : 'Ready when you are. More friends can still join with the code.')
+    : 'Waiting for the host to start.';
+}
+
+function renderGame() {
+  if (!V) return;
+  renderNet();
+  $('roundNo').textContent = `Round ${V.round}`;
+  if (V.phase !== 'end' && $('sheet').dataset.kind === 'results') closeModal();
+  if (pickFor !== V.round + V.phase) { pickFor = V.round + V.phase; votePick = -1; }
+  if (hiddenFor !== String(V.round)) { hiddenFor = String(V.round); cardHidden = false; }
+  renderCard();
+  renderBoard();
+  renderAct();
+  renderLog();
+  turnSignal(); keepAwake();
+  if (V.phase === 'end' && shownOver !== V.round) {
+    shownOver = V.round;
+    setTimeout(() => { if (V && V.phase === 'end' && $('modal').hidden) openResults(); }, 1400);
+  }
+}
+
+function cardHTML(c, opts) {
+  opts = opts || {};
+  const hide = opts.hide ? '<button class="ghost hide" type="button" id="cardHide">Hide</button>' : '';
+  if (c.imp) return `<div class="card imp">${hide}<p class="eyebrow">Shh… you are</p><div class="word">The imposter</div><p class="note">${c.cat ? `The category is <b>${esc(c.cat)}</b>. ` : ''}You don't know the word. Listen, then blend in.</p>${opts.extra || ''}</div>`;
+  return `<div class="card">${hide}<p class="eyebrow">The secret word</p><div class="word">${esc(c.word)}</div><p class="note">${esc(c.cat)} · one of you doesn't know it</p>${opts.extra || ''}</div>`;
+}
+function renderCard() {
+  const el = $('card');
+  el.className = role === 'solo' && (V.phase === 'cards' || (V.phase === 'guess' && !V.shown)) ? 'center' : '';
+  if (role === 'solo') {
+    if (V.phase === 'cards') {
+      const who = V.players[V.pass].name;
+      if (!V.shown) {
+        el.innerHTML = `<div class="card pass"><p class="eyebrow">${V.peek ? 'Check your card' : `Card ${V.pass + 1} of ${V.players.length}`}</p><div class="word">Pass the phone to <span>${esc(who)}</span></div><p class="note">Nobody else look!</p><button class="btn primary" type="button" id="soloShow">I'm ${esc(who)}: show my card</button></div>`;
+      } else {
+        const next = V.peek ? '' : V.pass + 1 < V.players.length ? V.players[V.pass + 1].name : '';
+        el.innerHTML = cardHTML(V.card, { extra: `<button class="btn primary" type="button" id="soloPassed">${V.peek ? 'Got it: hide it' : next ? `Got it: hide it and pass to ${esc(next)}` : 'Got it: hide it'}</button>` });
+      }
+    } else if (V.phase === 'guess') {
+      const who = V.players[V.imp].name;
+      el.innerHTML = V.shown ? '' : `<div class="card imp"><p class="eyebrow">Caught!</p><div class="word">${esc(who)} was the imposter</div><p class="note">Pass the phone to ${esc(who)}: one guess at the secret word to steal the win.</p><button class="btn red" type="button" id="soloShow">I'm ${esc(who)}: let me guess</button></div>`;
+    } else el.innerHTML = '';
+    return;
+  }
+  if (!V.card || V.me < 0) { el.innerHTML = V.me < 0 ? '<div class="card covered"><div class="word">You join next round</div><p class="note">Watch this one.</p></div>' : ''; return; }
+  if (V.phase === 'end') { el.innerHTML = ''; return; }
+  if (cardHidden) { el.innerHTML = '<div class="card covered" id="cardShow" role="button" tabindex="0"><div class="word">Tap to see your card</div></div>'; return; }
+  el.innerHTML = cardHTML(V.card, { hide: true });
+}
+
+function renderBoard() {
+  const el = $('board');
+  const solo = role === 'solo';
+  el.hidden = solo && (V.phase === 'cards' || (V.phase === 'guess' && !V.shown));
+  if (el.hidden) { el.innerHTML = ''; return; }
+  const voting = V.phase === 'vote' && (solo || (V.me >= 0));
+  const ended = V.phase === 'end';
+  const sp = speaker();
+  el.innerHTML = V.players.map((p, i) => {
+    const mine = i === V.me;
+    const tags = [];
+    if (ended && i === V.imp) tags.push('<small class="bad">Imposter</small>');
+    else if (V.phase === 'guess' && i === V.imp) tags.push('<small class="bad">Caught</small>');
+    else if (!solo && !p.online) tags.push('<small class="away">Away</small>');
+    else if (mine) tags.push('<small>You</small>');
+    const clues = V.clues.filter(c => c.pi === i).map(c => c.w == null ? '<span class="clue skip">skipped</span>' : `<span class="clue">${esc(c.w)}</span>`).join('');
+    let st = '';
+    if (V.phase === 'clue' && sp === i) st = '<span class="st go">Thinking…</span>';
+    else if (V.phase === 'vote' && !solo) st = V.voted[i] ? '<span class="st ok">Voted</span>' : '<span class="st">Voting…</span>';
+    else if (ended && V.result && !solo) st = `<span class="st votes">${V.result.tally[i]} vote${V.result.tally[i] === 1 ? '' : 's'}</span>`;
+    else if (ended && solo && V.accused === i) st = '<span class="st votes">Accused</span>';
+    const cls = ['prow'];
+    if (V.phase === 'clue' && sp === i) cls.push('turn');
+    if (voting && (votePick === i || (votePick < 0 && V.myVote === i))) cls.push('picked');
+    if (ended && i === V.imp) cls.push('was-imp');
+    const inner = `<span class="pn">${esc(p.name)}${tags.join('')}</span><span class="clues">${clues}</span>${st}`;
+    if (voting) return `<button class="${cls.join(' ')}" type="button" data-vote="${i}"${!solo && mine ? ' disabled' : ''} aria-label="Vote for ${esc(p.name)}">${inner}</button>`;
+    return `<div class="${cls.join(' ')}">${inner}</div>`;
+  }).join('');
+}
+
+function renderAct() {
+  const solo = role === 'solo', host = isRoomHost();
+  const mp = myPlayer();
+  let status = '', sub = '', more = '';
+  let clueOn = false;
+  const ph = V.phase;
+  if (ph === 'cards') {
+    status = V.peek ? 'Checking a card.' : 'Everyone looks at their card, one by one.';
+    sub = 'Hold the phone so only that person can see it.';
+  } else if (ph === 'clue') {
+    const sp = speaker();
+    const lapTxt = V.opts.laps > 1 ? ` · Round ${V.lap + 1} of ${V.opts.laps}` : '';
+    if (sp === V.me) {
+      status = 'Your turn: type one word.';
+      sub = (V.card && V.card.imp ? 'Fit in with the others. Not too vague, not a wild guess.' : 'Linked to the word, but don\'t make it too easy for the imposter.') + lapTxt;
+      clueOn = true;
+    } else {
+      status = `${nm(sp)} is thinking of a word…`;
+      sub = (V.players[sp] && !V.players[sp].online ? 'They are away. They get skipped in a few seconds.' : 'Read the clues so far: who sounds unsure?') + lapTxt;
+      if (host) more = `<div class="actions"><button class="btn" type="button" id="aSkip">Skip ${esc(V.players[sp].name)}</button></div>`;
+    }
+  } else if (ph === 'talk') {
+    const order = V.order.map(i => `<span>${esc(V.players[i].name)}</span>`).join('');
+    status = 'Say one word each, out loud.';
+    sub = `Go around in this order, ${V.opts.laps === 1 ? 'once' : V.opts.laps === 2 ? 'twice' : 'three times'}. Each word must be linked to the secret word.`;
+    more = `<div class="order-line">${order}</div>`;
+    if (host) more += `<div class="actions"><button class="btn primary" type="button" id="aToVote">Everyone's done: vote</button></div>`;
+    else sub += ' The host starts the vote.';
+    if (solo) more += `<p class="note">Forgot your word? <button class="ghost" type="button" id="aPeek">Check my card</button></p>`;
+  } else if (ph === 'vote') {
+    if (solo) {
+      status = 'Talk it over: who is the imposter?';
+      sub = votePick >= 0 ? `Accuse ${V.players[votePick].name}?` : 'Decide together, then tap that person.';
+      more = `<div class="actions"><button class="btn red" type="button" id="aVote"${votePick < 0 ? ' disabled' : ''}>${votePick >= 0 ? 'Accuse ' + esc(V.players[votePick].name) : 'Tap a player first'}</button></div><p class="note">Forgot your word? <button class="ghost" type="button" id="aPeek">Check my card</button></p>`;
+    } else if (V.me < 0) {
+      status = 'Everyone is voting.'; sub = 'You join next round.';
+    } else {
+      const n = V.voted.filter(Boolean).length, tot = V.players.filter(p => p.online).length;
+      const sel = votePick >= 0 ? votePick : V.myVote;
+      status = V.myVote >= 0 ? `You voted for ${V.players[V.myVote].name}.` : 'Vote: who is the imposter?';
+      sub = `${n} of ${tot} have voted. ${V.myVote >= 0 ? 'You can change your vote until everyone is done.' : 'Tap a player, then confirm.'} A tie means nobody is voted out.`;
+      more = `<div class="actions"><button class="btn red" type="button" id="aVote"${sel < 0 || sel === V.myVote ? ' disabled' : ''}>${sel >= 0 ? (sel === V.myVote ? 'Voted for ' : 'Vote for ') + esc(V.players[sel].name) : 'Tap a player first'}</button>${host ? '<button class="btn" type="button" id="aClose">Close the vote now</button>' : ''}</div>`;
+    }
+  } else if (ph === 'guess') {
+    const who = V.players[V.imp].name;
+    const meGuess = solo ? V.shown : V.imp === V.me;
+    if (meGuess && V.choices) {
+      status = 'Caught! Guess the secret word to steal the win.';
+      sub = `It was from ${V.catName}. You get one guess.`;
+      more = `<div class="choices">${V.choices.map(w => `<button class="btn" type="button" data-guess="${esc(w)}">${esc(w)}</button>`).join('')}</div>`;
+    } else {
+      status = `${who} was the imposter!`;
+      sub = solo ? 'Pass them the phone for one guess at the word.' : `They get one guess at the word to steal the win…`;
+    }
+  } else if (ph === 'end') {
+    const r = V.result;
+    const imp = V.players[V.imp];
+    status = r.impWins ? `${imp.id === me && !solo ? 'You win' : imp.name + ' wins'} the round!` : 'The imposter was caught!';
+    sub = `The word was <b>${esc(V.word)}</b>. ${howText(r, true)}`;
+    if (host) more = `<div class="actions"><button class="btn" type="button" id="aResults">Results</button><button class="btn primary" type="button" id="aNext">Next round</button></div>`;
+    else more = '<div class="actions"><button class="btn" type="button" id="aResults">Results</button></div><p class="note">The host starts the next round.</p>';
+  }
+  $('act').classList.toggle('mine', myTurn() || (solo && (ph === 'vote' || (ph === 'guess' && V.shown))));
+  $('status').textContent = status;
+  $('sub').innerHTML = ph === 'end' ? sub : esc(sub);
+  $('clueForm').hidden = !clueOn;
+  if (clueOn) {
+    $('clueSend').disabled = false;
+    if (document.activeElement !== $('clueIn') && window.matchMedia('(hover: hover)').matches) setTimeout(() => { if (!$('clueForm').hidden) $('clueIn').focus(); }, 0);
+  } else $('clueIn').value = '';
+  $('actMore').innerHTML = more;
+}
+
+function howText(r, short) {
+  const imp = V.players[V.imp].name;
+  if (r.how === 'tie') return `The vote was a tie, so ${imp} got away.`;
+  if (r.how === 'wrong') return `Everyone accused ${V.players[V.accused].name}, so ${imp} got away.`;
+  if (r.how === 'guessed') return `${imp} was caught but guessed the word, and steals the win.`;
+  return V.guess ? `${imp} was caught and guessed "${V.guess}". Wrong!` : `${imp} was caught and didn't guess in time.`;
+}
+
+let wasMyTurn = false, wakeLock = null;
+function turnSignal() {
+  const mine = myTurn();
+  document.title = mine ? 'Your turn · Imposter' : 'Imposter · Game Night';
+  if (mine && !wasMyTurn && role !== 'solo') { try { navigator.vibrate && navigator.vibrate(120); } catch (e) { /* not supported */ } }
+  wasMyTurn = mine;
+}
+function keepAwake() {
+  const want = !!(V && V.phase !== 'lobby') && document.visibilityState === 'visible';
+  if (want && !wakeLock && navigator.wakeLock) {
+    navigator.wakeLock.request('screen').then(l => { wakeLock = l; l.addEventListener('release', () => { wakeLock = null; }); }).catch(() => {});
+  } else if (!want && wakeLock) { try { wakeLock.release(); } catch (e) { /* skip */ } wakeLock = null; }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') keepAwake(); });
+function renderLog() {
+  const log = V.log || [];
+  $('logLast').textContent = log.length ? log[log.length - 1] : 'Game log';
+  $('logList').innerHTML = log.slice().reverse().map(t => `<li>${esc(t)}</li>`).join('');
+  $('logList').setAttribute('start', log.length);
+}
+
+/* ================= modals ================= */
+function openModal(html, kind) { $('sheet').innerHTML = html; $('sheet').dataset.kind = kind || ''; $('modal').hidden = false; const f = $('sheet').querySelector('button, input, select'); if (f && kind !== 'results') f.focus(); }
+function closeModal() { $('modal').hidden = true; $('sheet').innerHTML = ''; $('sheet').dataset.kind = ''; }
+
+function openRules() {
+  openModal(`<h2>How to <span>play</span></h2>
+  <p class="lede">Everyone gets the same secret word, except one player: the imposter. Give clues, then find the faker.</p>
+  <ul class="rules">
+    <li><b>Your card.</b> Everyone sees the secret word, like "Banana". The imposter only sees "You are the imposter" (and the category, if that setting is on).</li>
+    <li><b>Clues.</b> Take turns saying one word linked to the secret word. Go around once, twice or three times.</li>
+    <li><b>Careful.</b> Make your word too obvious and the imposter works out the secret. Make it too vague and people will think you're the imposter.</li>
+    <li><b>The imposter</b> listens to the others and bluffs a word that seems to fit.</li>
+    <li><b>Vote.</b> Everyone votes for who they think the imposter is. The player with the most votes is out. A tie means nobody is out.</li>
+    <li><b>Last chance.</b> If the imposter is caught, they get one guess at the secret word. Guess it and they still win.</li>
+    <li><b>Points.</b> The imposter gets 2 for getting away or guessing the word. Otherwise everyone else gets 1. In online rooms, voting for the real imposter gets you 1 more.</li>
+    <li><b>Two ways to play.</b> Online rooms: everyone on their own phone, 3 to 10 players, typing clues or saying them out loud. Pass one phone: each person looks at their card in turn, then you talk.</li>
+  </ul>
+  <div class="sheet-actions"><button class="btn primary" type="button" data-close>Got it</button></div>`);
+}
+
+function openResults() {
+  if (!V || V.phase !== 'end') return;
+  const r = V.result, host = isRoomHost(), solo = role === 'solo';
+  const imp = V.players[V.imp];
+  const order = V.players.map((p, i) => i).sort((a, b) => (V.players[b].score - V.players[a].score) || (r.pts[b] - r.pts[a]));
+  const head = r.impWins ? `${imp.id === me && !solo ? 'You' : esc(imp.name)} <span class="red">${imp.id === me && !solo ? 'win' : 'wins'}</span>` : `Imposter <span>caught!</span>`;
+  const btns = host
+    ? `<button class="btn" type="button" data-close>Look at the clues</button>${role === 'host' ? '<button class="btn" type="button" id="mLobby">Back to lobby</button>' : ''}<button class="btn primary" type="button" id="mNext">Next round</button>`
+    : `<button class="btn primary" type="button" data-close>Look at the clues</button>`;
+  openModal(`<h2>${head}</h2>
+    <p class="lede">The word was <b>${esc(V.word)}</b> (${esc(V.catName)}). ${esc(imp.name)} was the imposter. ${esc(howText(r))}${host ? '' : ' The host starts the next round.'}</p>
+    <ol class="order">${order.map((i, k) => { const p = V.players[i]; const voteTo = r.votes[i]; return `<li class="${i === V.me ? 'me-row' : ''}${i === V.imp ? ' imp-row' : ''}"><span class="pl">${k + 1}</span><span class="nm">${esc(p.name)}${i === V.imp ? ' 🎭' : ''}${!solo && voteTo != null ? `<small>voted for ${esc(V.players[voteTo].name)}</small>` : ''}</span><span class="plus">${r.pts[i] ? '+' + r.pts[i] : ''}</span><span class="pts">${p.score}<small>points</small></span></li>`; }).join('')}</ol>
+    <div class="sheet-actions">${btns}</div>`, 'results');
+}
+
+function openScores() {
+  if (!V) return;
+  const order = V.players.map((p, i) => i).sort((a, b) => V.players[b].score - V.players[a].score);
+  openModal(`<h2>Table <span>scores</span></h2>
+    <p class="lede">Points after ${V.round} round${V.round === 1 ? '' : 's'}.${V.waiting && V.waiting.length ? ' Waiting to join: ' + esc(V.waiting.join(', ')) + '.' : ''}</p>
+    <ol class="order">${order.map((i, k) => { const p = V.players[i]; return `<li class="${i === V.me ? 'me-row' : ''}"><span class="pl">${k + 1}</span><span class="nm">${esc(p.name)}</span><span></span><span class="pts">${p.score}<small>points</small></span></li>`; }).join('')}</ol>
+    <div class="sheet-actions"><button class="btn primary" type="button" data-close>Close</button></div>`);
+}
+
+function openPeek() {
+  openModal(`<h2>Whose <span>card</span>?</h2>
+    <p class="lede">Pick your name. The next screen tells everyone to look away first.</p>
+    <div class="menu-list">${V.players.map((p, i) => `<button class="btn" type="button" data-peek="${i}">${esc(p.name)}</button>`).join('')}</div>
+    <div class="sheet-actions"><button class="btn" type="button" data-close>Cancel</button></div>`);
+}
+
+function openLeave() {
+  const msg = role === 'host' ? 'This closes the room for everyone in it.' : role === 'guest' ? 'You can rejoin with the same code and name.' : 'Your game is saved. You can continue it from the start screen.';
+  openModal(`<h2>${role === 'host' ? 'Close the <span>room</span>?' : role === 'guest' ? 'Leave the <span>room</span>?' : 'Quit to the <span>start screen</span>?'}</h2>
+    <p class="lede">${msg}</p>
+    <div class="sheet-actions"><button class="btn" type="button" data-close>Stay</button><button class="btn primary" type="button" id="mLeave">${role === 'host' ? 'Close room' : role === 'guest' ? 'Leave' : 'Quit to start screen'}</button></div>`);
+}
+
+/* ================= starting things ================= */
+function readName() {
+  const v = ($('hName').value || '').trim().slice(0, 14);
+  if (!v) { homeMsg = 'Type your name first.'; homeErr = true; renderHome(); $('hName').focus(); return false; }
+  myName = v; setItem(LS, 'im-name', v);
+  return true;
+}
+function startSolo() {
+  if (passNames.length < MIN_PLAYERS) return;
+  role = 'solo'; S = baseState('solo', homeOpts);
+  passNames.forEach((n, i) => S.players.push(newPlayer(i === 0 ? me : 'p-' + rid(), n)));
+  shownOver = null; pickFor = '';
+  newRound();
+}
+function continueSolo() {
+  const s = getItem(LS, 'im-solo');
+  if (!s || s.v !== 1) return;
+  role = 'solo'; S = s; S.hostId = me; S.players[0].id = me; S.shown = false;
+  shownOver = S.phase === 'end' ? S.round : null; pickFor = '';
+  changed();
+}
+function createRoom() {
+  if (!readName()) return;
+  if (waitNet(createRoom)) return;
+  if (!netReady()) { homeMsg = "Couldn't load the connection tools. Check your internet and reload."; homeErr = true; renderHome(); return; }
+  role = 'host'; roomCode = newCode(); hostSess = rid(); shownOver = null;
+  S = baseState('room', getItem(LS, 'im-room-opts'));
+  S.players.push(newPlayer(me, myName));
+  history.replaceState(null, '', '#' + roomCode);
+  openHostPeer(); startHostRelay();
+  changed();
+}
+function reopenRoom() {
+  const g = getItem(LS, 'im-host');
+  if (!g || !g.S) return;
+  if (!readName()) return;
+  if (waitNet(reopenRoom)) return;
+  if (!netReady()) { homeMsg = "Couldn't load the connection tools. Check your internet and reload."; homeErr = true; renderHome(); return; }
+  role = 'host'; roomCode = g.code; hostSess = rid(); S = g.S;
+  const hp = S.players.find(p => p.id === S.hostId) || S.players[0];
+  if (hp) { hp.id = me; hp.name = myName; }
+  S.hostId = me;
+  shownOver = S.phase === 'end' ? S.round : null; pickFor = '';
+  history.replaceState(null, '', '#' + roomCode);
+  openHostPeer(); startHostRelay();
+  normalizeHost();
+  changed();
+}
+function joinFromForm() {
+  if (!readName()) return;
+  const code = ($('hCode').value || '').toUpperCase().replace(/[^A-Z]/g, '');
+  if (code.length !== 4) { homeMsg = 'Room codes are 4 letters.'; homeErr = true; renderHome(); return; }
+  if (waitNet(joinFromForm)) return;
+  if (!netReady()) { homeMsg = "Couldn't load the connection tools. Check your internet and reload."; homeErr = true; renderHome(); return; }
+  history.replaceState(null, '', '#' + code);
+  pickFor = ''; shownOver = null;
+  joinRoom(code);
+}
+
+/* ================= events ================= */
+$('hSolo').addEventListener('click', startSolo);
+$('hContinue').addEventListener('click', continueSolo);
+$('hCreate').addEventListener('click', createRoom);
+$('hReopen').addEventListener('click', reopenRoom);
+$('joinForm').addEventListener('submit', e => { e.preventDefault(); joinFromForm(); });
+$('hRules').addEventListener('click', openRules);
+$('hName').addEventListener('input', () => { if (homeErr) { homeMsg = ''; homeErr = false; $('homeMsg').textContent = ''; } });
+$('nameForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const v = ($('hAddName').value || '').trim().slice(0, 14);
+  if (!v) return;
+  if (passNames.some(n => n.toLowerCase() === v.toLowerCase())) { homeMsg = `${v} is already in the list.`; homeErr = true; renderHome(); return; }
+  if (passNames.length >= MAX_PLAYERS) return;
+  passNames.push(v); setItem(LS, 'im-names', passNames);
+  $('hAddName').value = ''; homeMsg = ''; homeErr = false;
+  renderHome(); $('hAddName').focus();
+});
+$('hNames').addEventListener('click', e => {
+  const b = e.target.closest('[data-drop]');
+  if (!b) return;
+  passNames.splice(+b.dataset.drop, 1); setItem(LS, 'im-names', passNames); renderHome();
+});
+function onSet(e, el, isLobby) {
+  const o = readSettings(el, isLobby ? V.opts : homeOpts, e);
+  if (!o) return;
+  if (isLobby) { if (role !== 'host') return; setItem(LS, 'im-room-opts', o); act('settings', o); $('lSet').innerHTML = settingsHTML(o, true, true); }
+  else { homeOpts = o; setItem(LS, 'im-opts', o); $('hSet').innerHTML = settingsHTML(o, true, false); }
+}
+['click', 'change'].forEach(ev => {
+  $('hSet').addEventListener(ev, e => { if ((ev === 'click') === !!e.target.closest('[data-cat]')) onSet(e, $('hSet'), false); });
+  $('lSet').addEventListener(ev, e => { if ((ev === 'click') === !!e.target.closest('[data-cat]')) onSet(e, $('lSet'), true); });
+});
+
+$('lStart').addEventListener('click', () => act('start'));
+$('lPlayers').addEventListener('click', e => { const b = e.target.closest('[data-remove]'); if (b) act('remove', { id: b.dataset.remove }); });
+$('lRules').addEventListener('click', openRules);
+$('lLeave').addEventListener('click', openLeave);
+$('lCopy').addEventListener('click', () => {
+  const link = shareLink(), msg = $('lCopyMsg');
+  const done = t => { msg.textContent = t; setTimeout(() => { msg.textContent = ''; }, 2500); };
+  if (navigator.share) {
+    navigator.share({ title: 'Imposter', text: `Join my Imposter room. Code: ${roomCode}`, url: link }).catch(() => {});
+    return;
+  }
+  const pickText = () => { const r = document.createRange(); r.selectNodeContents($('lLink')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); done('Link selected. Copy it from here.'); };
+  try { navigator.clipboard.writeText(link).then(() => done('Link copied. Send it to your friends.'), pickText); } catch (e) { pickText(); }
+});
+
+$('card').addEventListener('click', e => {
+  if (e.target.closest('#cardHide')) { cardHidden = true; renderCard(); }
+  else if (e.target.closest('#cardShow')) { cardHidden = false; renderCard(); }
+  else if (e.target.closest('#soloShow')) act('show');
+  else if (e.target.closest('#soloPassed')) act('passed');
+});
+$('card').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.id === 'cardShow') { e.preventDefault(); cardHidden = false; renderCard(); } });
+$('board').addEventListener('click', e => {
+  const b = e.target.closest('[data-vote]');
+  if (!b || b.disabled || !V || V.phase !== 'vote') return;
+  votePick = +b.dataset.vote;
+  renderBoard(); renderAct();
+});
+$('clueForm').addEventListener('submit', e => {
+  e.preventDefault();
+  if (!V || V.phase !== 'clue' || speaker() !== V.me) return;
+  const w = cleanClue($('clueIn').value);
+  if (!w) return;
+  if (!okClue(w)) { $('sub').textContent = 'Just one word, no spaces.'; return; }
+  if (V.card && !V.card.imp && givesAway(w, V.card.word)) { $('sub').textContent = "That's the secret word itself! Pick a different word."; return; }
+  $('clueSend').disabled = true;
+  act('clue', { w });
+});
+$('actMore').addEventListener('click', e => {
+  const t = e.target;
+  if (t.closest('#aSkip')) act('skip');
+  else if (t.closest('#aToVote')) act('toVote');
+  else if (t.closest('#aClose')) act('closeVote');
+  else if (t.closest('#aPeek')) openPeek();
+  else if (t.closest('#aResults')) openResults();
+  else if (t.closest('#aNext')) { closeModal(); act('next'); }
+  else if (t.closest('#aVote')) {
+    const to = votePick >= 0 ? votePick : -1;
+    if (to < 0) return;
+    act('vote', { to });
+    votePick = -1;
+  } else {
+    const g = t.closest('[data-guess]');
+    if (g) { $('actMore').querySelectorAll('[data-guess]').forEach(b => { b.disabled = true; }); act('guess', { w: g.dataset.guess }); }
+  }
+});
+$('btnRules').addEventListener('click', openRules);
+$('btnScores').addEventListener('click', openScores);
+$('btnLeave').addEventListener('click', openLeave);
+$('btnMenu').addEventListener('click', () => {
+  openModal(`<h2>Menu</h2>
+    <div class="menu-list">
+      <button class="btn" type="button" id="mmRules">Rules</button>
+      <button class="btn" type="button" id="mmScores">Scores</button>
+      ${V && V.phase === 'end' ? '<button class="btn" type="button" id="mmResults">Round result</button>' : ''}
+      <button class="btn" type="button" id="mmLeave">${role === 'host' ? 'Close room' : role === 'guest' ? 'Leave room' : 'Quit to start screen'}</button>
+    </div>
+    <div class="sheet-actions"><button class="btn primary" type="button" data-close>Back to the game</button></div>`);
+});
+
+$('modal').addEventListener('click', e => {
+  const pk = e.target.closest('[data-peek]');
+  if (pk) { closeModal(); act('peek', { i: +pk.dataset.peek }); return; }
+  if (e.target === $('modal') || e.target.closest('[data-close]')) closeModal();
+  else if (e.target.closest('#mmRules')) openRules();
+  else if (e.target.closest('#mmScores')) openScores();
+  else if (e.target.closest('#mmResults')) openResults();
+  else if (e.target.closest('#mmLeave')) openLeave();
+  else if (e.target.closest('#mNext')) { closeModal(); act('next'); }
+  else if (e.target.closest('#mLobby')) { closeModal(); act('lobby'); }
+  else if (e.target.closest('#mLeave')) {
+    closeModal();
+    if (role === 'solo') { token++; clearTimeout(timer); role = null; S = null; V = null; shownOver = null; homeMsg = ''; homeErr = false; render(); }
+    else leave();
+  }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('modal').hidden) closeModal(); });
+window.addEventListener('pagehide', () => { if (role === 'guest' && hostConn && hostConn.open) { try { hostConn.send({ t: 'away' }); } catch (e) { /* skip */ } } });
+window.addEventListener('beforeunload', e => { if (role === 'host' && conns.size) { e.preventDefault(); e.returnValue = ''; } });
+
+/* ================= boot ================= */
+(function boot() {
+  const hashCode = (location.hash || '').replace('#', '').toUpperCase().replace(/[^A-Z]/g, '');
+  if (hashCode.length === 4) $('hCode').value = hashCode;
+  if (!passNames.length && myName) passNames = [myName];
+  const savedGuest = getItem(LS, 'im-guest');
+  const savedHost = getItem(LS, 'im-host');
+  render();
+  if (!onlineOK) return;
+  NET.then(() => {
+    if (role) return;
+    if (myName && savedHost && savedHost.code && hashCode === savedHost.code && netReady()) { reopenRoom(); return; }
+    if (myName && savedGuest && savedGuest.code && (!hashCode || hashCode === savedGuest.code) && netReady()) { joinRoom(savedGuest.code); return; }
+    if (hashCode.length === 4) { homeMsg = myName ? `Tap Join room to join room ${hashCode}.` : `Type your name, then tap Join room to join room ${hashCode}.`; renderHome(); }
+  });
+})();
+})();
+</script>
+
+</html>
